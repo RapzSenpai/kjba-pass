@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, X, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock3, X, XCircle } from 'lucide-react'
 import { formatTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { StationResult } from '@/types/db'
@@ -41,20 +41,37 @@ export function ResultCard({
     <div
       role="status"
       aria-live="polite"
-      className={cn('flex w-full items-start gap-3 rounded-xl border-2 p-4', card, className)}
+      className={cn(
+        'flex w-full items-start gap-3 rounded-2xl border-2 p-4 shadow-sm',
+        card,
+        className,
+      )}
     >
-      <Icon className={cn('mt-0.5 size-6 shrink-0', icon)} aria-hidden />
+      <span
+        className={cn(
+          'grid size-11 shrink-0 place-items-center rounded-full bg-current/10 ring-1 ring-current/20',
+          icon,
+        )}
+        aria-hidden
+      >
+        <Icon className="size-6" />
+      </span>
       <div className="min-w-0 flex-1">
-        <p className="text-lg leading-tight font-semibold break-words">{title}</p>
+        <p className="text-xl leading-tight font-bold break-words">{title}</p>
         {detail ? <p className="mt-1 text-sm">{detail}</p> : null}
-        {result.at ? <p className="mt-1 text-sm opacity-80">at {formatTime(result.at)}</p> : null}
+        {result.at ? (
+          <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium opacity-80">
+            <Clock3 className="size-3.5" aria-hidden />
+            {formatTime(result.at)}
+          </p>
+        ) : null}
       </div>
       {onDismiss ? (
         <button
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss result"
-          className="-me-1 -mt-1 rounded-md p-1.5 hover:bg-foreground/10"
+          className="-me-1 -mt-1 grid size-9 shrink-0 place-items-center rounded-full hover:bg-foreground/10"
         >
           <X className="size-5" aria-hidden />
         </button>

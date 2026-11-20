@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { StatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/common/checkbox'
 import { formatDateTime, manilaDateStamp } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
 import type { AdminResult, RafflePoolEntry, SettingsRow, WinnerWithGuest } from '@/types/db'
@@ -470,15 +471,13 @@ export function RafflePage() {
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
           <h2 className="text-lg font-semibold">Pool lock</h2>
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={locked}
               disabled={settings.isPending || lockPending || !settings.data}
-              onChange={(event) => {
-                if (event.target.checked) setConfirmLock(true)
+              onCheckedChange={(next) => {
+                if (next) setConfirmLock(true)
                 else void updateLock(false)
               }}
-              className="size-4 rounded border-input accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             />
             Lock raffle pool
           </label>

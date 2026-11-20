@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/common/checkbox'
 import { formatDateTime } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
 import type { SettingsRow } from '@/types/db'
@@ -157,11 +158,9 @@ function SettingsForm({ row }: { row: SettingsRow }) {
         <h2 className="text-lg font-semibold">Registration</h2>
 
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={registrationOpen}
-            onChange={(event) => setRegistrationOpen(event.target.checked)}
-            className="size-4 rounded border-input accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            onCheckedChange={setRegistrationOpen}
           />
           Registration open
         </label>
@@ -182,12 +181,7 @@ function SettingsForm({ row }: { row: SettingsRow }) {
         <h2 className="text-lg font-semibold">Check-in</h2>
 
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={checkinOpen}
-            onChange={(event) => setCheckinOpen(event.target.checked)}
-            className="size-4 rounded border-input accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          />
+          <Checkbox checked={checkinOpen} onCheckedChange={setCheckinOpen} />
           Check-in open
         </label>
 
@@ -207,22 +201,12 @@ function SettingsForm({ row }: { row: SettingsRow }) {
         <h2 className="text-lg font-semibold">Stations</h2>
 
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={cocktailEnabled}
-            onChange={(event) => setCocktailEnabled(event.target.checked)}
-            className="size-4 rounded border-input accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          />
+          <Checkbox checked={cocktailEnabled} onCheckedChange={setCocktailEnabled} />
           Cocktail enabled
         </label>
 
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={bundleEnabled}
-            onChange={(event) => setBundleEnabled(event.target.checked)}
-            className="size-4 rounded border-input accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          />
+          <Checkbox checked={bundleEnabled} onCheckedChange={setBundleEnabled} />
           Bundle of Joy enabled
         </label>
       </div>

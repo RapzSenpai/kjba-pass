@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/common/checkbox'
 
 export function ConfirmDialog({
   open,
@@ -81,12 +82,7 @@ export function ConfirmDialog({
 
         {checkboxLabel ? (
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={(event) => setChecked(event.target.checked)}
-              className="size-4 rounded border-input accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            />
+            <Checkbox checked={checked} onCheckedChange={setChecked} />
             {checkboxLabel}
           </label>
         ) : null}

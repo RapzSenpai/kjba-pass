@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ResultCard } from '@/components/common/result-card'
+import { SelectField } from '@/components/common/select-field'
 import { Button } from '@/components/ui/button'
 import { useSession } from '@/hooks/useSession'
 import { useStaffProfile } from '@/hooks/useStaffProfile'
@@ -26,6 +27,12 @@ const stationMeta: Record<Station, { label: string; badge: string }> = {
   cocktail: { label: 'COCKTAIL', badge: 'bg-[var(--station-cocktail)]' },
   bundle: { label: 'BUNDLE OF JOY', badge: 'bg-[var(--station-bundle)]' },
 }
+
+const stationOptions = [
+  { value: 'entrance', label: 'Check-in' },
+  { value: 'cocktail', label: 'Cocktail' },
+  { value: 'bundle', label: 'Bundle of Joy' },
+]
 
 function readTab(): Tab {
   try {
@@ -146,18 +153,16 @@ export function ScannerPage() {
       </div>
 
       {isAdmin ? (
-        <label className="flex items-center justify-between gap-3 text-sm font-medium">
-          Station
-          <select
+        <div className="flex items-center justify-between gap-3 text-sm font-medium">
+          <span>Station</span>
+          <SelectField
+            ariaLabel="Station"
             value={station}
-            onChange={(event) => changeStation(event.target.value as Station)}
-            className="h-11 rounded-lg border border-input bg-background px-3 text-base font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="entrance">Check-in</option>
-            <option value="cocktail">Cocktail</option>
-            <option value="bundle">Bundle of Joy</option>
-          </select>
-        </label>
+            onValueChange={(next) => changeStation(next as Station)}
+            options={stationOptions}
+            className="w-56"
+          />
+        </div>
       ) : null}
 
       {rpcError ? (

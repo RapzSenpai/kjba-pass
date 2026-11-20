@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
+import { SelectField } from '@/components/common/select-field'
 import { StatusBadge, type StatusTone } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
 import { downloadCsv } from '@/lib/csv'
@@ -16,6 +17,19 @@ const GUEST_COLUMNS =
 
 type StatusFilter = 'all' | 'registered' | 'checked_in' | 'voided'
 type ClaimFilter = 'all' | 'yes' | 'no'
+
+const statusOptions = [
+  { value: 'all', label: 'All' },
+  { value: 'registered', label: 'Registered' },
+  { value: 'checked_in', label: 'Checked in' },
+  { value: 'voided', label: 'Voided' },
+]
+
+const claimOptions = [
+  { value: 'all', label: 'All' },
+  { value: 'yes', label: 'Claimed' },
+  { value: 'no', label: 'Not claimed' },
+]
 
 type GuestAction = 'void' | 'restore' | 'undo_check_in' | 'undo_claim_cocktail' | 'undo_claim_bundle'
 
@@ -268,45 +282,27 @@ export function GuestsPage() {
       </label>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          Status
-          <select
-            value={status}
-            onChange={(event) => setStatus(event.target.value as StatusFilter)}
-            className="h-11 rounded-lg border border-input bg-background px-3 text-base font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="all">All</option>
-            <option value="registered">Registered</option>
-            <option value="checked_in">Checked in</option>
-            <option value="voided">Voided</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          Cocktail
-          <select
-            value={cocktail}
-            onChange={(event) => setCocktail(event.target.value as ClaimFilter)}
-            className="h-11 rounded-lg border border-input bg-background px-3 text-base font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="all">All</option>
-            <option value="yes">Claimed</option>
-            <option value="no">Not claimed</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          Bundle of Joy
-          <select
-            value={bundle}
-            onChange={(event) => setBundle(event.target.value as ClaimFilter)}
-            className="h-11 rounded-lg border border-input bg-background px-3 text-base font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="all">All</option>
-            <option value="yes">Claimed</option>
-            <option value="no">Not claimed</option>
-          </select>
-        </label>
+        <SelectField
+          id="guest-status-filter"
+          label="Status"
+          value={status}
+          onValueChange={(next) => setStatus(next as StatusFilter)}
+          options={statusOptions}
+        />
+        <SelectField
+          id="guest-cocktail-filter"
+          label="Cocktail"
+          value={cocktail}
+          onValueChange={(next) => setCocktail(next as ClaimFilter)}
+          options={claimOptions}
+        />
+        <SelectField
+          id="guest-bundle-filter"
+          label="Bundle of Joy"
+          value={bundle}
+          onValueChange={(next) => setBundle(next as ClaimFilter)}
+          options={claimOptions}
+        />
       </div>
 
       {guests.isError && !guests.data ? (

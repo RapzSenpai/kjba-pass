@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { SelectField } from '@/components/common/select-field'
 import { StatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/common/checkbox'
 import { useSession } from '@/hooks/useSession'
 import { formatDateTime } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
@@ -15,6 +17,11 @@ const stationLabels: Record<Station, string> = {
   cocktail: 'Cocktail',
   bundle: 'Bundle of Joy',
 }
+
+const stationOptions = (Object.keys(stationLabels) as Station[]).map((value) => ({
+  value,
+  label: stationLabels[value],
+}))
 
 export function StaffPage() {
   const queryClient = useQueryClient()
@@ -140,32 +147,26 @@ export function StaffPage() {
                         {row.role === 'admin' ? (
                           <span className="text-muted-foreground">Any station</span>
                         ) : (
-                          <select
+                          <SelectField
+                            ariaLabel={`Station for ${row.full_name}`}
                             value={row.station ?? 'entrance'}
-                            disabled={busy}
-                            onChange={(event) =>
-                              void updateStaff(row.user_id, { station: event.target.value as Station })
+                            onValueChange={(next) =>
+                              void updateStaff(row.user_id, { station: next as Station })
                             }
-                            aria-label={`Station for ${row.full_name}`}
-                            className="h-9 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {(Object.keys(stationLabels) as Station[]).map((station) => (
-                              <option key={station} value={station}>
-                                {stationLabels[station]}
-                              </option>
-                            ))}
-                          </select>
+                            options={stationOptions}
+                            disabled={busy}
+                            compact
+                            className="w-40"
+                          />
                         )}
                       </td>
                       <td className="px-3 py-3">
                         <label className="inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={row.active}
                             disabled={busy || isSelf || !session}
-                            onChange={(event) => void updateStaff(row.user_id, { active: event.target.checked })}
+                            onCheckedChange={(next) => void updateStaff(row.user_id, { active: next })}
                             aria-label={`Active status for ${row.full_name}`}
-                            className="size-4 rounded border-input accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                           />
                           <span>{row.active ? 'Active' : 'Inactive'}</span>
                         </label>
@@ -207,21 +208,16 @@ export function StaffPage() {
                         {row.role === 'admin' ? (
                           'Any station'
                         ) : (
-                          <select
+                          <SelectField
+                            ariaLabel={`Station for ${row.full_name}`}
                             value={row.station ?? 'entrance'}
-                            disabled={busy}
-                            onChange={(event) =>
-                              void updateStaff(row.user_id, { station: event.target.value as Station })
+                            onValueChange={(next) =>
+                              void updateStaff(row.user_id, { station: next as Station })
                             }
-                            aria-label={`Station for ${row.full_name}`}
-                            className="mt-1 h-11 w-full rounded-lg border border-input bg-background px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {(Object.keys(stationLabels) as Station[]).map((station) => (
-                              <option key={station} value={station}>
-                                {stationLabels[station]}
-                              </option>
-                            ))}
-                          </select>
+                            options={stationOptions}
+                            disabled={busy}
+                            className="mt-1 w-full"
+                          />
                         )}
                       </dd>
                     </div>
@@ -232,12 +228,10 @@ export function StaffPage() {
                   </dl>
 
                   <label className="flex items-center gap-2 text-sm font-medium">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={row.active}
                       disabled={busy || isSelf || !session}
-                      onChange={(event) => void updateStaff(row.user_id, { active: event.target.checked })}
-                      className="size-4 rounded border-input accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                      onCheckedChange={(next) => void updateStaff(row.user_id, { active: next })}
                     />
                     {row.active ? 'Active' : 'Inactive'}
                   </label>

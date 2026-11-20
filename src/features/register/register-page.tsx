@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/common/checkbox'
 import { usePublicSettings } from '@/hooks/usePublicSettings'
 import { env } from '@/lib/env'
 import { formatEventDate } from '@/lib/format'
@@ -178,11 +179,10 @@ export function RegisterPage() {
             </label>
 
             <label className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={accepted}
-                onChange={(event) => setAccepted(event.target.checked)}
-                className="mt-0.5 size-5 shrink-0 accent-[var(--primary)]"
+                onCheckedChange={setAccepted}
+                className="mt-0.5 size-5"
               />
               <span>I understand I must be present to win raffle prizes.</span>
             </label>
