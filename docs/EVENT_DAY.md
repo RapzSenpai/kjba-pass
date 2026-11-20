@@ -7,9 +7,14 @@ This runbook covers operational instructions for staff and administrators at the
 ## 1. One Day Before
 
 - [ ] **Verify Supabase Status**: Open the Supabase dashboard to verify the free-tier project is active and not paused.
+- [ ] **Create and Test Staff Accounts** (do this the day before, not on event day):
+  - Open `/admin/staff` as admin.
+  - Use the **Add staff** button to create each staff account (full name, email, station, generated password).
+  - Copy the credentials from the one-time panel immediately — the password is shown only once.
+  - Assign the correct station (`entrance`, `cocktail`, or `bundle`) at creation time.
 - [ ] **Prepare Staff Phones**:
   - Open `/login` on each staff phone.
-  - Sign in with station-specific credentials.
+  - Sign in with the credentials created above.
   - Verify the assigned station badge appears (`Check-in`, `Cocktail`, or `Bundle of Joy`).
   - Keep browser logged in and prevent screen timeout.
 - [ ] **Test Cameras**:

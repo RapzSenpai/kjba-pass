@@ -25,7 +25,9 @@ export function StaffLayout() {
         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-2">
           <Logo />
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm text-muted-foreground">{profile.data?.full_name}</span>
+            <span className="max-w-[120px] truncate text-xs text-muted-foreground sm:max-w-none sm:text-sm">
+              {profile.data?.full_name}
+            </span>
             <Button
               type="button"
               variant="ghost"

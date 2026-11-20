@@ -19,6 +19,29 @@ export type LogAction =
   | 'export_guests'
   | 'copy_raffle_names'
   | 'update_settings'
+  | 'create_staff'
+  | 'reset_staff_password'
+  | 'set_staff_active'
+
+export type ManageStaffAction = 'create' | 'reset_password' | 'set_active'
+
+export type ManageStaffErrorCode =
+  | 'email_exists'
+  | 'invalid_input'
+  | 'not_admin'
+  | 'not_allowed'
+  | 'not_found'
+  | 'unauthenticated'
+  | 'server_error'
+
+export type ManageStaffRequest =
+  | { action: 'create'; full_name: string; email: string; station: Station; password: string }
+  | { action: 'reset_password'; user_id: string; password: string }
+  | { action: 'set_active'; user_id: string; active: boolean }
+
+export type ManageStaffResult =
+  | { ok: true; user_id?: string }
+  | { ok: false; code: ManageStaffErrorCode; message: string }
 
 export type PublicSettings = {
   event_name: string

@@ -1346,6 +1346,28 @@ Acceptance: every item in the QA checklist passes on the live URL.
 
 ---
 
+### Phase 8 — Staff management in the UI (Edge Function `manage-staff`)
+
+**Prerequisite:** Phases 0–7 done and app deployed. Do not start before the core flow (register, pass, scan, admin) works on the live URL.
+
+**Goal:** Admin creates staff accounts, resets passwords, and activates/deactivates staff from the Staff page. No trips to the Supabase dashboard. `templates/add_staff.sql` stays as a fallback.
+
+**Amendments to earlier sections:**
+- Section 9.8 (Staff): "Do not build account creation in the UI" no longer applies. Admin accounts are still created via `templates/create_admin.sql`.
+- Section 9.8 actions: active toggle goes through the Edge Function (not a direct table update). Station change still uses a direct update on `staff.station`.
+- Section 6 / `09_grants.sql`: direct `update (active)` grant is revoked in `11_staff_management.sql`. Never edit `09_grants.sql`.
+
+**Tasks:**
+1. `supabase/sql/11_staff_management.sql` — revokes `update (active)` on `staff` from `authenticated`. Add to `APPLIED.md` and `README.md`. Extend `99_verify.sql` with a PASS/FAIL check.
+2. Edge Function `supabase/functions/manage-staff/index.ts` — actions: `create`, `reset_password`, `set_active`. Caller must be admin. Orphan cleanup on insert failure. Ban sync on `set_active`. Direct `activity_logs` insert (no `write_log()`). Deploy by pasting into Supabase dashboard > Edge Functions > name exactly `manage-staff` > JWT verification ON. No new secrets.
+3. Frontend `src/features/admin/staff/` — `api.ts`, `generatePassword.ts`, `AddStaffDialog.tsx`, `ResetPasswordDialog.tsx`, `StaffCredentialsPanel.tsx`. Staff page: Add staff button, row actions (reset password, activate/deactivate, change station), admin rows show no actions, isSelf shows "You" badge. Password shown only once; never stored in localStorage, query cache, URL, or logs.
+4. `src/types/db.ts` — add `ManageStaffAction`, `ManageStaffErrorCode`, `ManageStaffRequest`, `ManageStaffResult`, and extend `LogAction` union.
+5. Docs: update `supabase/README.md`, `supabase/APPLIED.md`, `docs/EVENT_DAY.md`, `plan.md`.
+
+**Acceptance:** build and lint pass; can create a staff account from UI; credentials panel shows once then clears; deactivated staff cannot log in; audit log entry appears for each action.
+
+---
+
 ## 12. QA checklist (run on production URL)
 
 - [ ] Register, duplicate name blocked, lowercase and extra-space duplicate blocked

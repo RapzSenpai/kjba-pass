@@ -21,9 +21,9 @@ import { supabase } from '@/lib/supabase'
 
 const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/admin/guests', label: 'Guests', icon: Users },
-  { to: '/admin/staff', label: 'Staff', icon: UserCog },
-  { to: '/admin/raffle', label: 'Raffle', icon: Trophy },
+  { to: '/admin/guests', label: 'Guest Management', icon: Users },
+  { to: '/admin/staff', label: 'Staff Management', icon: UserCog },
+  { to: '/admin/raffle', label: 'Raffle Management', icon: Trophy },
   { to: '/admin/logs', label: 'Activity Logs', icon: ScrollText },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ]

@@ -13,6 +13,9 @@ export const actionLabels = {
   export_guests: 'Exported guests',
   copy_raffle_names: 'Copied raffle names',
   update_settings: 'Updated settings',
+  create_staff: 'Created staff',
+  reset_staff_password: 'Reset staff password',
+  set_staff_active: 'Set staff active',
 } satisfies Record<LogAction, string>
 
 export const stationLabels: Record<Station, string> = {

@@ -5,17 +5,17 @@ import type { StationResult } from '@/types/db'
 
 const tones = {
   success: {
-    card: 'border-[var(--success)] bg-[var(--success-soft)] text-[var(--success-text)]',
+    card: 'border border-[var(--success)]/25 bg-[var(--success-soft)] text-[var(--success-text)]',
     icon: 'text-[var(--success)]',
     Icon: CheckCircle2,
   },
   action: {
-    card: 'border-[var(--action)] bg-[var(--action-soft)] text-[var(--action-text)]',
+    card: 'border border-[var(--action)]/25 bg-[var(--action-soft)] text-[var(--action-text)]',
     icon: 'text-[var(--action)]',
     Icon: AlertTriangle,
   },
   stop: {
-    card: 'border-[var(--stop)] bg-[var(--stop-soft)] text-[var(--stop-text)]',
+    card: 'border border-[var(--stop)]/25 bg-[var(--stop-soft)] text-[var(--stop-text)]',
     icon: 'text-[var(--stop)]',
     Icon: XCircle,
   },
@@ -42,25 +42,25 @@ export function ResultCard({
       role="status"
       aria-live="polite"
       className={cn(
-        'flex w-full items-start gap-3 rounded-2xl border-2 p-4 shadow-sm',
+        'relative flex w-full items-start gap-3 rounded-xl p-3.5 shadow-xs',
         card,
         className,
       )}
     >
-      <span
+      <div
         className={cn(
-          'grid size-11 shrink-0 place-items-center rounded-full bg-current/10 ring-1 ring-current/20',
+          'flex size-8 shrink-0 items-center justify-center rounded-full bg-current/10',
           icon,
         )}
         aria-hidden
       >
-        <Icon className="size-6" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-xl leading-tight font-bold break-words">{title}</p>
-        {detail ? <p className="mt-1 text-sm">{detail}</p> : null}
+        <Icon className="size-4.5" />
+      </div>
+      <div className="min-w-0 flex-1 pt-0.5">
+        <p className="text-base font-semibold leading-tight break-words">{title}</p>
+        {detail ? <p className="mt-1 text-sm leading-normal opacity-90">{detail}</p> : null}
         {result.at ? (
-          <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium opacity-80">
+          <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium opacity-75">
             <Clock3 className="size-3.5" aria-hidden />
             {formatTime(result.at)}
           </p>
@@ -71,9 +71,9 @@ export function ResultCard({
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss result"
-          className="-me-1 -mt-1 grid size-9 shrink-0 place-items-center rounded-full hover:bg-foreground/10"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-current/60 transition-colors hover:bg-black/5 hover:text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/30"
         >
-          <X className="size-5" aria-hidden />
+          <X className="size-4" aria-hidden />
         </button>
       ) : null}
     </div>

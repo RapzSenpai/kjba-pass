@@ -52,7 +52,14 @@ union all
 select 'public_settings_readable',
   case when has_function_privilege('anon', 'public.get_public_settings()', 'execute')
   then 'PASS' else 'FAIL' end,
-  'anon can execute get_public_settings';
+  'anon can execute get_public_settings'
+
+union all
+
+select 'staff_active_not_updatable_by_authenticated',
+  case when not has_column_privilege('authenticated', 'public.staff', 'active', 'update')
+  then 'PASS' else 'FAIL' end,
+  'authenticated cannot update staff.active directly';
 
 -- Acceptance checks from the plan, run manually:
 --   select public.get_public_settings();

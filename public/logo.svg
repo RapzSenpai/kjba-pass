@@ -1,3 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 32" role="img" aria-label="KJBA">
-  <text x="0" y="24" fill="#0A0A0A" font-family="Inter, sans-serif" font-size="22" font-weight="700">KJBA</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 32" role="img" aria-label="KJBA productions">
+  <text x="0" y="22" font-family="Inter, system-ui, -apple-system, sans-serif">
+    <tspan fill="#0A0A0A" font-size="20" font-weight="700" letter-spacing="-0.02em">KJBA</tspan>
+    <tspan dx="6" fill="#737373" font-size="12" font-weight="400">productions</tspan>
+  </text>
 </svg>

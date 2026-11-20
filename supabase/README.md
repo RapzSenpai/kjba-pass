@@ -54,17 +54,51 @@ The templates are **not** part of the run order. They are run once per person or
 - `set local role anon; select * from public.guests;` fails (roll back afterwards).
 - `select token from public.guests;` as `authenticated` fails.
 
-## Edge Function
+## Edge Functions
 
-`register-guest` is deployed by pasting `supabase/functions/register-guest/index.ts` into the Supabase dashboard **Edge Functions** editor. Keep JWT verification on. The client calls it with `supabase.functions.invoke`.
+### `register-guest`
+
+Paste `supabase/functions/register-guest/index.ts` into the Supabase dashboard **Edge Functions** editor, name it exactly `register-guest`. Keep JWT verification **on**. The client calls it with `supabase.functions.invoke`.
 
 Secrets to set in the dashboard:
 
 - `TURNSTILE_SECRET_KEY`
-- `ALLOWED_ORIGIN` (the Vercel domain, no trailing slash; comma-separated allowed)
-
-For local dev, add `http://localhost:5173` to the `ALLOWED_ORIGIN` list, e.g. `https://your-app.vercel.app,http://localhost:5173`.
+- `ALLOWED_ORIGIN` (the Vercel domain, no trailing slash; comma-separated for local dev, e.g. `https://your-app.vercel.app,http://localhost:5173`)
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically. Never put the service role key in frontend code or in a file committed to git.
 
-The function is written in Phase 3.
+Written in Phase 3.
+
+### `manage-staff`
+
+Paste `supabase/functions/manage-staff/index.ts` into the Supabase dashboard **Edge Functions** editor, name it exactly `manage-staff`. Keep JWT verification **on**.
+
+**No new secrets needed.** It reuses `ALLOWED_ORIGIN` already set above. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically.
+
+Supports three actions (POST body `{ action, ...fields }`):
+- `create` — creates Auth user + staff row; on staff insert failure, deletes the orphan Auth user.
+- `reset_password` — updates password for a `role = 'staff'` target only.
+- `set_active` — toggles `staff.active` and bans/unbans the Auth user.
+
+Admin rows and the caller's own row are protected. All actions are written to `activity_logs` directly (not via `write_log()`).
+
+The first admin account is still created via `templates/create_admin.sql`. See **Auth setup** above.
+
+Written in Phase 8.
+
+## SQL run order (including Phase 8)
+
+| File | What it does |
+|---|---|
+| `sql/01_extensions.sql` | Enable `pgcrypto` |
+| `sql/02_tables.sql` | Tables, indexes, append-only trigger |
+| `sql/03_helpers.sql` | Role checks, token, logging helpers |
+| `sql/04_views.sql` | `raffle_pool` and `guest_overview` |
+| `sql/05_rls.sql` | RLS policies |
+| `sql/06_functions_public.sql` | Public settings, registration, guest pass |
+| `sql/07_functions_staff.sql` | Check-in, station claim, search |
+| `sql/08_functions_admin.sql` | Void, undo, raffle, dashboard |
+| `sql/09_grants.sql` | Revoke defaults, grant column/execute access |
+| `sql/10_seed.sql` | Insert settings row |
+| `sql/11_staff_management.sql` | Revoke direct `update (active)` on staff |
+| `sql/99_verify.sql` | Read-only PASS/FAIL checks |
