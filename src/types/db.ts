@@ -74,6 +74,7 @@ export type RegisterRequest = {
   name: string
   team_id: string
   turnstileToken: string
+  request_id: string
 }
 
 export type RegisterResult =

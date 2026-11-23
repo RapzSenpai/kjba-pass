@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase'
 import type { RegisterRequest, RegisterResult, Team } from '@/types/db'
 
 const TOKEN_KEY = 'kjba_pass_token'
+const REQUEST_KEY = 'kjba_reg_request_id'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -49,6 +50,27 @@ function storeToken(token: string) {
     localStorage.setItem(TOKEN_KEY, token)
   } catch {
     // Storage can be blocked; the pass still works in this tab.
+  }
+}
+
+// Reused across retries so a lost response returns the same pass instead of name_exists.
+function readRequestId(): string {
+  try {
+    const stored = localStorage.getItem(REQUEST_KEY)
+    if (stored && UUID_PATTERN.test(stored)) return stored
+    const next = crypto.randomUUID()
+    localStorage.setItem(REQUEST_KEY, next)
+    return next
+  } catch {
+    return crypto.randomUUID()
+  }
+}
+
+function clearRequestId() {
+  try {
+    localStorage.removeItem(REQUEST_KEY)
+  } catch {
+    // Storage can be blocked; the next attempt just gets a new id.
   }
 }
 
@@ -87,6 +109,7 @@ export function RegisterPage() {
   })
   const navigate = useNavigate()
   const [storedToken] = useState(readStoredToken)
+  const [requestId] = useState(readRequestId)
   const [accepted, setAccepted] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileKey, setTurnstileKey] = useState(0)
@@ -145,6 +168,7 @@ export function RegisterPage() {
       name: values.name,
       team_id: team.id,
       turnstileToken,
+      request_id: requestId,
     }
 
     const { data, error } = await supabase.functions.invoke<RegisterResult>('register-guest', {
@@ -170,6 +194,7 @@ export function RegisterPage() {
     }
 
     storeToken(data.token)
+    clearRequestId()
     navigate(`/g/${data.token}`)
   }
 

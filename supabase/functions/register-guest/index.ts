@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, code: 'method_not_allowed', message: 'POST only.' }, 405, origin)
   }
 
-  let payload: { name?: unknown; team_id?: unknown; turnstileToken?: unknown }
+  let payload: { name?: unknown; team_id?: unknown; turnstileToken?: unknown; request_id?: unknown }
   try {
     const raw = await req.text()
     if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) {
@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
   const name = payload.name
   const teamId = payload.team_id
   const turnstileToken = payload.turnstileToken
+  const requestId = payload.request_id
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
   if (
@@ -74,7 +75,8 @@ Deno.serve(async (req) => {
     typeof turnstileToken !== 'string' ||
     name.length > 200 ||
     !uuidPattern.test(teamId) ||
-    turnstileToken.length === 0
+    turnstileToken.length === 0 ||
+    (requestId !== undefined && (typeof requestId !== 'string' || !uuidPattern.test(requestId)))
   ) {
     return json({ ok: false, code: 'invalid_request', message: 'Invalid request.' }, 400, origin)
   }
@@ -132,6 +134,7 @@ Deno.serve(async (req) => {
   const { data, error } = await supabase.rpc('register_guest_internal', {
     p_name: name,
     p_team_id: teamId,
+    p_request_id: typeof requestId === 'string' ? requestId : null,
   })
 
   if (error) {
