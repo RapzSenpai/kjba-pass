@@ -5,8 +5,8 @@ import type { ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { usePublicSettings } from '@/hooks/usePublicSettings'
+import { guestRpc } from '@/lib/guest-api'
 import { cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
 import type { GuestPass } from '@/types/db'
 
 function StatusRow({ done, label }: { done: boolean; label: string }) {
@@ -42,11 +42,7 @@ export function PassPage() {
     queryKey: ['pass', token],
     enabled: Boolean(token),
     refetchOnWindowFocus: true,
-    queryFn: async (): Promise<GuestPass> => {
-      const { data, error } = await supabase.rpc('get_pass', { p_token: token ?? '' })
-      if (error) throw error
-      return data as GuestPass
-    },
+    queryFn: () => guestRpc<GuestPass>('get_pass', { p_token: token ?? '' }),
   })
 
   const refreshButton = (

@@ -1,15 +1,15 @@
 import { lazy, Suspense } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { Logo } from '@/components/common/logo'
-import { AdminLayout } from '@/components/layout/admin-layout'
 import { GuestLayout } from '@/components/layout/guest-layout'
-import { StaffLayout } from '@/components/layout/staff-layout'
-import { RequireRole } from '@/features/auth/require-role'
-import { PassPage } from '@/features/pass/pass-page'
-import { RegisterPage } from '@/features/register/register-page'
 
 const LoginPage = lazy(() => import('@/features/auth/login-page').then((m) => ({ default: m.LoginPage })))
+const RequireRole = lazy(() => import('@/features/auth/require-role').then((m) => ({ default: m.RequireRole })))
+const RegisterPage = lazy(() => import('@/features/register/register-page').then((m) => ({ default: m.RegisterPage })))
+const PassPage = lazy(() => import('@/features/pass/pass-page').then((m) => ({ default: m.PassPage })))
 const ScannerPage = lazy(() => import('@/features/scanner/scanner-page').then((m) => ({ default: m.ScannerPage })))
+const StaffLayout = lazy(() => import('@/components/layout/staff-layout').then((m) => ({ default: m.StaffLayout })))
+const AdminLayout = lazy(() => import('@/components/layout/admin-layout').then((m) => ({ default: m.AdminLayout })))
 const DashboardPage = lazy(() => import('@/features/admin/dashboard/dashboard-page').then((m) => ({ default: m.DashboardPage })))
 const GuestsPage = lazy(() => import('@/features/admin/guests/guests-page').then((m) => ({ default: m.GuestsPage })))
 const StaffPage = lazy(() => import('@/features/admin/staff/staff-page').then((m) => ({ default: m.StaffPage })))
@@ -43,90 +43,36 @@ function NotFoundPage() {
 
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/register" replace />} />
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        <Route path="/" element={<Navigate to="/register" replace />} />
 
-      <Route element={<GuestLayout />}>
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/g/:token" element={<PassPage />} />
-      </Route>
-
-      <Route
-        path="/login"
-        element={
-          <Suspense fallback={<PageFallback />}>
-            <LoginPage />
-          </Suspense>
-        }
-      />
-
-      <Route element={<RequireRole allowed={['staff', 'admin']} />}>
-        <Route element={<StaffLayout />}>
-          <Route
-            path="/scan"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <ScannerPage />
-              </Suspense>
-            }
-          />
+        <Route element={<GuestLayout />}>
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/g/:token" element={<PassPage />} />
         </Route>
-      </Route>
 
-      <Route element={<RequireRole allowed={['admin']} />}>
-        <Route element={<AdminLayout />}>
-          <Route
-            path="/admin"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <DashboardPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/admin/guests"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <GuestsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/admin/staff"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <StaffPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/admin/raffle"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <RafflePage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/admin/logs"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <LogsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/admin/settings"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <SettingsPage />
-              </Suspense>
-            }
-          />
+        <Route path="/login" element={<LoginPage />} />
+
+        <Route element={<RequireRole allowed={['staff', 'admin']} />}>
+          <Route element={<StaffLayout />}>
+            <Route path="/scan" element={<ScannerPage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+        <Route element={<RequireRole allowed={['admin']} />}>
+          <Route element={<AdminLayout />}>
+            <Route path="/admin" element={<DashboardPage />} />
+            <Route path="/admin/guests" element={<GuestsPage />} />
+            <Route path="/admin/staff" element={<StaffPage />} />
+            <Route path="/admin/raffle" element={<RafflePage />} />
+            <Route path="/admin/logs" element={<LogsPage />} />
+            <Route path="/admin/settings" element={<SettingsPage />} />
+          </Route>
+        </Route>
+
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Suspense>
   )
 }

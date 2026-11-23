@@ -3,7 +3,6 @@ import { ChevronRight } from 'lucide-react'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { useQuery } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { FunctionsHttpError } from '@supabase/supabase-js'
 import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
@@ -13,7 +12,7 @@ import { SelectField } from '@/components/common/select-field'
 import { usePublicSettings } from '@/hooks/usePublicSettings'
 import { env } from '@/lib/env'
 import { formatEventDate } from '@/lib/format'
-import { supabase } from '@/lib/supabase'
+import { guestRpc, registerGuest } from '@/lib/guest-api'
 import type { RegisterRequest, RegisterResult, Team } from '@/types/db'
 
 const TOKEN_KEY = 'kjba_pass_token'
@@ -74,15 +73,6 @@ function clearRequestId() {
   }
 }
 
-async function readInvokeError(error: unknown): Promise<RegisterResult | null> {
-  if (!(error instanceof FunctionsHttpError)) return null
-  try {
-    return (await (error.context as Response).json()) as RegisterResult
-  } catch {
-    return null
-  }
-}
-
 function PageState({ title, onRetry }: { title: string; onRetry?: () => void }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 text-center">
@@ -100,11 +90,7 @@ export function RegisterPage() {
   const settings = usePublicSettings()
   const teams = useQuery({
     queryKey: ['teams'],
-    queryFn: async (): Promise<Team[]> => {
-      const { data, error } = await supabase.rpc('get_teams')
-      if (error) throw error
-      return (data ?? []) as Team[]
-    },
+    queryFn: () => guestRpc<Team[]>('get_teams', {}),
     staleTime: 60 * 60 * 1000,
   })
   const navigate = useNavigate()
@@ -171,14 +157,11 @@ export function RegisterPage() {
       request_id: requestId,
     }
 
-    const { data, error } = await supabase.functions.invoke<RegisterResult>('register-guest', {
-      body,
-    })
-
-    if (error) {
-      showFailure(await readInvokeError(error))
-      resetTurnstile()
-      return
+    let data: RegisterResult | null
+    try {
+      data = await registerGuest(body)
+    } catch {
+      data = null
     }
 
     if (!data) {
