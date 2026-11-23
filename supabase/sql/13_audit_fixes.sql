@@ -271,3 +271,29 @@ begin
     'guest_name', g.name, 'at', now());
 end;
 $$;
+
+-- F-13: one dashboard request instead of three --------------------------------
+create or replace function public.dashboard_snapshot()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not_authorized' using errcode = '42501';
+  end if;
+
+  return jsonb_build_object(
+    'stats', public.dashboard_stats(),
+    'teams', public.team_stats(),
+    'recent', coalesce((
+      select jsonb_agg(to_jsonb(r) order by r.created_at desc)
+      from (
+        select id, created_at, actor_name, action, guest_name, result
+        from public.activity_logs
+        order by created_at desc
+        limit 30
+      ) r
+    ), '[]'::jsonb)
+  );
+end;
+$$;
+
+grant execute on function public.dashboard_snapshot() to authenticated;

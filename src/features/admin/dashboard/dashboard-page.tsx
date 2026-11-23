@@ -198,6 +198,7 @@ function SiteSection({
 type DashboardData = {
   stats: DashboardStats
   teams: TeamStats[]
+  recent: RecentActivity[]
 }
 
 type ActivityGroup =
@@ -241,59 +242,35 @@ function resultTone(result: string | null) {
 }
 
 export function DashboardPage() {
-  const stats = useQuery({
-    queryKey: ['dashboard_stats'],
+  const snapshot = useQuery({
+    queryKey: ['dashboard_snapshot'],
     queryFn: async (): Promise<DashboardData> => {
-      const [statsResult, teamsResult] = await Promise.all([
-        supabase.rpc('dashboard_stats'),
-        supabase.rpc('team_stats'),
-      ])
-
-      if (statsResult.error) throw statsResult.error
-      if (teamsResult.error) throw teamsResult.error
-
-      return {
-        stats: statsResult.data as DashboardStats,
-        teams: (teamsResult.data ?? []) as TeamStats[],
-      }
+      const { data, error } = await supabase.rpc('dashboard_snapshot')
+      if (error) throw error
+      return data as DashboardData
     },
     refetchInterval: () => (document.visibilityState === 'visible' ? 5000 : false),
   })
 
-  const recent = useQuery({
-    queryKey: ['recent_activity'],
-    queryFn: async (): Promise<RecentActivity[]> => {
-      const { data, error } = await supabase
-        .from('activity_logs')
-        .select('id, created_at, actor_name, action, guest_name, result')
-        .order('created_at', { ascending: false })
-        .limit(30)
-
-      if (error) throw error
-      return (data ?? []) as RecentActivity[]
-    },
-    refetchInterval: 5000,
-  })
-
-  if (stats.isPending) {
+  if (snapshot.isPending) {
     return <p className="text-sm text-muted-foreground">Loading dashboard…</p>
   }
 
-  if (!stats.data) {
+  if (!snapshot.data) {
     return (
       <div className="flex flex-col items-start gap-3">
         <p className="text-sm text-muted-foreground">Could not load the dashboard.</p>
-        <Button type="button" variant="outline" className="h-11 px-4 text-base" onClick={() => void stats.refetch()}>
+        <Button type="button" variant="outline" className="h-11 px-4 text-base" onClick={() => void snapshot.refetch()}>
           Try again
         </Button>
       </div>
     )
   }
 
-  const s = stats.data.stats
-  const teamRows = stats.data.teams
+  const s = snapshot.data.stats
+  const teamRows = snapshot.data.teams
   const unassigned = teamRows.find((team) => team.site === 'Unassigned')
-  const activity = recent.data ? groupActivity(recent.data) : []
+  const activity = snapshot.data.recent.length > 0 ? groupActivity(snapshot.data.recent) : []
   const turnoutRate = s.registered > 0 ? Math.round((s.eligible / s.registered) * 100) : 0
 
   return (
@@ -413,11 +390,7 @@ export function DashboardPage() {
           </Link>
         </div>
 
-        {recent.isError && !recent.data ? (
-          <p className="text-sm text-muted-foreground">Could not load recent activity.</p>
-        ) : recent.isPending ? (
-          <p className="text-sm text-muted-foreground">Loading activity…</p>
-        ) : activity.length > 0 ? (
+        {activity.length > 0 ? (
           <ul className="divide-y divide-border rounded-xl border border-border bg-card">
             {activity.map((group) =>
               group.kind === 'guest' ? (
