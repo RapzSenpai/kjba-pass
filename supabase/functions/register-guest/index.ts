@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // Keep JWT verification on. The service role key is provided by the platform.
 
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+const MAX_BODY_BYTES = 4096
 
 function allowedOrigins(): string[] {
   return (Deno.env.get('ALLOWED_ORIGIN') ?? '')
@@ -50,7 +51,14 @@ Deno.serve(async (req) => {
 
   let payload: { name?: unknown; team_id?: unknown; turnstileToken?: unknown }
   try {
-    payload = await req.json()
+    const raw = await req.text()
+    if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) {
+      return json({ ok: false, code: 'invalid_request', message: 'Request is too large.' }, 413, origin)
+    }
+    payload = JSON.parse(raw)
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return json({ ok: false, code: 'invalid_request', message: 'Invalid request.' }, 400, origin)
+    }
   } catch {
     return json({ ok: false, code: 'invalid_request', message: 'Invalid request.' }, 400, origin)
   }
