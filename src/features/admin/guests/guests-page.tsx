@@ -279,7 +279,7 @@ export function GuestsPage() {
 
       if (query.trim()) request = request.ilike('name', `%${escapeLike(query.trim())}%`)
       if (status === 'registered') request = request.is('checked_in_at', null).eq('voided', false)
-      if (status === 'checked_in') request = request.not('checked_in_at', 'is', null)
+      if (status === 'checked_in') request = request.not('checked_in_at', 'is', null).eq('voided', false)
       if (status === 'voided') request = request.eq('voided', true)
       if (cocktail !== 'all') request = request.eq('cocktail_claimed', cocktail === 'yes')
       if (bundle !== 'all') request = request.eq('bundle_claimed', bundle === 'yes')
