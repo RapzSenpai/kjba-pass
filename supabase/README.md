@@ -9,7 +9,7 @@ Run these once, in order:
 | File | What it does |
 |---|---|
 | `sql/01_extensions.sql` | Enable `pgcrypto` in the `extensions` schema |
-| `sql/02_tables.sql` | Six tables, indexes, append-only trigger on `activity_logs` |
+| `sql/02_tables.sql` | Core tables, indexes, append-only trigger on `activity_logs` |
 | `sql/03_helpers.sql` | Role checks, name normalization, token and backup code, logging, guest resolve |
 | `sql/04_views.sql` | `raffle_pool` and `guest_overview` |
 | `sql/05_rls.sql` | Enable RLS and admin/staff policies |
@@ -20,9 +20,12 @@ Run these once, in order:
 | `sql/10_seed.sql` | Insert the single settings row |
 | `sql/11_staff_management.sql` | Revoke direct `update (active)` on staff |
 | `sql/12_teams.sql` | Teams, sites, registration team requirement, per-team stats |
+| `sql/13_audit_fixes.sql` | Idempotent registration, atomic winner, name/letter check, dashboard snapshot, audit gaps |
 | `sql/99_verify.sql` | Read-only checks after the files above; every row must say PASS |
 
 Tick each row in `APPLIED.md` after running it.
+
+`13_audit_fixes.sql` changes the registration and dashboard contracts. Apply it, redeploy `register-guest` and `manage-staff`, then deploy the frontend. Reversing that order breaks registration and the dashboard.
 
 When a new function is added later, run its `grant execute` line in a new numbered SQL file. Never edit a file that has already been applied.
 
@@ -107,4 +110,5 @@ Written in Phase 8.
 | `sql/10_seed.sql` | Insert settings row |
 | `sql/11_staff_management.sql` | Revoke direct `update (active)` on staff |
 | `sql/12_teams.sql` | Teams, sites, registration team requirement, per-team stats |
+| `sql/13_audit_fixes.sql` | Idempotent registration, atomic winner, name/letter check, dashboard snapshot, audit gaps |
 | `sql/99_verify.sql` | Read-only PASS/FAIL checks |

@@ -5,6 +5,24 @@
 **Mode:** Read-only. No application code, SQL, or configuration was changed.  
 **Event:** Safelinks Christmas Party, Dec 19, 2026, Toledo Megadome Sports Center.
 
+## Fix pass — 2026-11-23
+
+Code fixes applied after owner approval. Runtime and device checks remain manual.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| F-10 | High | Scanner clears the previous result before every RPC (`scanner-page.tsx`). |
+| F-07 | High | `record_winner` locks the guest, re-checks the pool, and a partial unique index enforces one active win (`13_audit_fixes.sql`). |
+| F-05 | Medium | Zod and SQL require at least one letter in guest names. |
+| F-08 | Medium | Checked-in filter excludes voided guests. |
+| F-03 | Medium | `register-guest` rejects bodies over 4 KB before parsing. |
+| F-06 | Medium | Client request id + `guests.request_id` replay returns the original pass on retry. |
+| F-09 | Medium | Disabled-station claims are logged; client and Edge audit writes are checked. |
+| F-13 | Medium | `dashboard_snapshot()` serves stats, teams, and recent activity in one call. |
+| F-11 | Medium | Routes, layouts, and guards are lazy; guest pages use plain fetch instead of supabase-js. Initial preload ~113 KB gzip, `/register` ~210 KB. |
+
+Not fixed: F-01, F-02, F-04, F-12, F-14, F-15 (Low). Staging, load, and device checks stay `CANNOT VERIFY` until the owner runs them.
+
 ## 1. Executive summary
 
 **Verdict: NO-GO today. Conditional go only after the two High findings are fixed and the unverified staging/security checks pass.**

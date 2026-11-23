@@ -1,4 +1,4 @@
--- Read-only checks. Run after 01..12. Every row should say PASS.
+-- Read-only checks. Run after 01..13. Every row should say PASS.
 -- (No table writes, no SET ROLE: an error would abort the whole script in the SQL Editor.)
 
 select 'rls_enabled' as check_name,
@@ -72,19 +72,50 @@ select 'get_teams_public',
 union all
 
 select 'register_guest_signatures',
-  case when to_regprocedure('public.register_guest_internal(text, uuid)') is not null
+  case when to_regprocedure('public.register_guest_internal(text, uuid, uuid)') is not null
+        and to_regprocedure('public.register_guest_internal(text, uuid)') is null
         and to_regprocedure('public.register_guest_internal(text)') is null
   then 'PASS' else 'FAIL' end,
-  'new (text, uuid) exists; old (text) is gone'
+  'new (text, uuid, uuid) exists; old 2-arg and 1-arg versions are gone'
 
 union all
 
 select 'register_guest_internal_service_only',
-  case when has_function_privilege('anon', 'public.register_guest_internal(text, uuid)', 'execute')
-        or has_function_privilege('authenticated', 'public.register_guest_internal(text, uuid)', 'execute')
-        or not has_function_privilege('service_role', 'public.register_guest_internal(text, uuid)', 'execute')
+  case when has_function_privilege('anon', 'public.register_guest_internal(text, uuid, uuid)', 'execute')
+        or has_function_privilege('authenticated', 'public.register_guest_internal(text, uuid, uuid)', 'execute')
+        or not has_function_privilege('service_role', 'public.register_guest_internal(text, uuid, uuid)', 'execute')
   then 'FAIL' else 'PASS' end,
   'anon and authenticated cannot execute; service_role can'
+
+union all
+
+select 'guests_request_id_index',
+  case when exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'guests'
+      and indexname = 'guests_request_id_idx'
+  ) then 'PASS' else 'FAIL' end,
+  'guests.request_id has a unique partial index'
+
+union all
+
+select 'winners_one_active_index',
+  case when exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'winners'
+      and indexname = 'winners_one_active_idx'
+  ) then 'PASS' else 'FAIL' end,
+  'winners has one active win per guest index'
+
+union all
+
+select 'dashboard_snapshot_admin_only_static',
+  case when not has_function_privilege('anon', 'public.dashboard_snapshot()', 'execute')
+        and position('is_admin' in pg_get_functiondef('public.dashboard_snapshot()'::regprocedure)) > 0
+  then 'PASS' else 'FAIL' end,
+  'anon cannot execute dashboard_snapshot; function checks is_admin'
 
 union all
 
