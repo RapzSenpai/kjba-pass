@@ -253,10 +253,11 @@ export function RafflePage() {
       }
 
       toast.success(`Copied ${entries.length} names.`)
-      void supabase.rpc('log_admin_action', {
+      const { error: logError } = await supabase.rpc('log_admin_action', {
         p_action: 'copy_raffle_names',
         p_details: { count: entries.length },
       })
+      if (logError) toast.warning('Copied, but the audit log could not be written.')
     } catch {
       toast.error('Could not copy names. Check the network and try again.')
     }
@@ -371,10 +372,11 @@ export function RafflePage() {
       toast.success(locked ? 'Raffle pool locked. Check-in is blocked.' : 'Raffle pool unlocked.')
       setConfirmLock(false)
       void queryClient.invalidateQueries({ queryKey: ['settings'] })
-      void supabase.rpc('log_admin_action', {
+      const { error: logError } = await supabase.rpc('log_admin_action', {
         p_action: 'update_settings',
         p_details: { raffle_locked: locked },
       })
+      if (logError) toast.warning('Raffle lock saved, but the audit log could not be written.')
     } catch {
       toast.error('Could not update the raffle lock. Check the network and try again.')
     } finally {

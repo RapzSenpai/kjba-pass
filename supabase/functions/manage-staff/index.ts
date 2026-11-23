@@ -75,6 +75,11 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
+  async function auditLog(entry: Record<string, unknown>) {
+    const { error } = await adminClient.from('activity_logs').insert(entry)
+    if (error) console.error('manage-staff: audit log failed', error.code)
+  }
+
   const { data: authData, error: authError } = await adminClient.auth.getUser(jwt)
   if (authError || !authData.user) {
     return json({ ok: false, code: 'unauthenticated', message: 'Invalid token.' }, 401, origin)
@@ -90,7 +95,7 @@ Deno.serve(async (req) => {
 
   if (!callerStaff || !callerStaff.active || callerStaff.role !== 'admin') {
     // Log rejected attempt
-    await adminClient.from('activity_logs').insert({
+    await auditLog({
       actor_id: callerId,
       actor_name: callerStaff?.full_name ?? null,
       actor_role: callerStaff?.role ?? null,
@@ -198,7 +203,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, code: 'server_error', message: 'Account created but could not save staff record. Auth user cleaned up.' }, 500, origin)
     }
 
-    await adminClient.from('activity_logs').insert({
+    await auditLog({
       actor_id: callerId,
       actor_name: callerName,
       actor_role: 'admin',
@@ -237,7 +242,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, code: 'not_found', message: 'Staff member not found.' }, 404, origin)
     }
     if (target.role !== 'staff') {
-      await adminClient.from('activity_logs').insert({
+      await auditLog({
         actor_id: callerId, actor_name: callerName, actor_role: 'admin',
         action: 'reset_staff_password', station: target.station ?? null, method: 'manual',
         result: 'rejected', details: { target_user_id: targetId, target_name: target.full_name, reason: 'not_allowed' },
@@ -250,7 +255,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, code: 'server_error', message: 'Could not reset password.' }, 500, origin)
     }
 
-    await adminClient.from('activity_logs').insert({
+    await auditLog({
       actor_id: callerId, actor_name: callerName, actor_role: 'admin',
       action: 'reset_staff_password', station: target.station ?? null, method: 'manual',
       result: 'success', details: { target_user_id: targetId, target_name: target.full_name },
@@ -281,7 +286,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, code: 'not_found', message: 'Staff member not found.' }, 404, origin)
     }
     if (target.role !== 'staff') {
-      await adminClient.from('activity_logs').insert({
+      await auditLog({
         actor_id: callerId, actor_name: callerName, actor_role: 'admin',
         action: 'set_staff_active', station: target.station ?? null, method: 'manual',
         result: 'rejected', details: { target_user_id: targetId, target_name: target.full_name, active, reason: 'not_allowed' },
@@ -324,7 +329,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    await adminClient.from('activity_logs').insert({
+    await auditLog({
       actor_id: callerId, actor_name: callerName, actor_role: 'admin',
       action: 'set_staff_active', station: target.station ?? null, method: 'manual',
       result: 'success', details: { target_user_id: targetId, target_name: target.full_name, active },

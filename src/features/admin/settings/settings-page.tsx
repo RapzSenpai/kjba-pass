@@ -75,7 +75,7 @@ function SettingsForm({ row }: { row: SettingsRow }) {
       }
 
       toast.success('Settings saved.')
-      void supabase.rpc('log_admin_action', {
+      const { error: logError } = await supabase.rpc('log_admin_action', {
         p_action: 'update_settings',
         p_details: {
           registration_open: registrationOpen,
@@ -86,6 +86,7 @@ function SettingsForm({ row }: { row: SettingsRow }) {
           bundle_enabled: bundleEnabled,
         },
       })
+      if (logError) toast.warning('Settings saved, but the audit log could not be written.')
       void queryClient.invalidateQueries({ queryKey: ['settings'] })
       void queryClient.invalidateQueries({ queryKey: ['public-settings'] })
     } catch {
