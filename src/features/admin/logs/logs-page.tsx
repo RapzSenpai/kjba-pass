@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { SelectField } from '@/components/common/select-field'
 import { StatusBadge, type StatusTone } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
-import { formatDateTime } from '@/lib/format'
+import { formatDate, formatDateTime, formatTime } from '@/lib/format'
 import { actionLabels, methodLabels, stationLabels } from '@/lib/labels'
 import { supabase } from '@/lib/supabase'
 import type { ActivityLogRow, ClaimMethod, LogAction, Station } from '@/types/db'
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 15
 
 type ResultFilter = 'all' | 'success' | 'already' | 'rejected'
 
@@ -198,32 +199,42 @@ export function LogsPage() {
       ) : (
         <>
           <div className="hidden overflow-x-auto rounded-xl border border-border bg-card md:block">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-muted/50 text-xs text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 font-medium">Time</th>
                   <th className="px-3 py-2 font-medium">Actor</th>
-                  <th className="px-3 py-2 font-medium">Role</th>
                   <th className="px-3 py-2 font-medium">Action</th>
                   <th className="px-3 py-2 font-medium">Guest</th>
-                  <th className="px-3 py-2 font-medium">Station</th>
-                  <th className="px-3 py-2 font-medium">Method</th>
-                  <th className="px-3 py-2 font-medium">Result</th>
+                  <th className="w-1 px-3 py-2 text-end font-medium">Result</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.map((row) => (
                   <tr key={row.id}>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                      {formatDateTime(row.created_at)}
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">
+                      <div className="font-medium text-foreground">{formatDate(row.created_at)}</div>
+                      <div className="text-muted-foreground">{formatTime(row.created_at)}</div>
                     </td>
-                    <td className="px-3 py-2 break-words">{row.actor_name ?? '—'}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{row.actor_role ?? '—'}</td>
-                    <td className="px-3 py-2">{actionLabels[row.action]}</td>
-                    <td className="px-3 py-2 break-words">{row.guest_name ?? '—'}</td>
-                    <td className="px-3 py-2">{row.station ? stationLabels[row.station] : '—'}</td>
-                    <td className="px-3 py-2">{row.method ? methodLabels[row.method] : '—'}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-xs">
+                      <div className="font-medium text-foreground">{row.actor_name ?? '—'}</div>
+                      {row.actor_role ? (
+                        <div className="text-muted-foreground capitalize">{row.actor_role}</div>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <div className="font-medium text-foreground">
+                        {actionLabels[row.action]}
+                        {row.station ? ` · ${stationLabels[row.station]}` : ''}
+                      </div>
+                      {row.method ? (
+                        <div className="text-muted-foreground">via {methodLabels[row.method]}</div>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2 text-xs font-medium">
+                      {row.guest_name ?? <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="w-1 px-3 py-2 text-end whitespace-nowrap">
                       <StatusBadge tone={resultTone(row.result)}>{resultLabel(row.result)}</StatusBadge>
                     </td>
                   </tr>
@@ -277,11 +288,12 @@ export function LogsPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 px-4 text-base"
+                size="icon"
+                aria-label="Previous page"
                 disabled={page === 0 || logs.isFetching}
                 onClick={() => setPage((value) => Math.max(0, value - 1))}
               >
-                Previous
+                <ChevronLeft className="size-4" aria-hidden />
               </Button>
               <span className="text-sm text-muted-foreground">
                 Page {page + 1} of {pageCount}
@@ -289,11 +301,12 @@ export function LogsPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 px-4 text-base"
+                size="icon"
+                aria-label="Next page"
                 disabled={page + 1 >= pageCount || logs.isFetching}
                 onClick={() => setPage((value) => value + 1)}
               >
-                Next
+                <ChevronRight className="size-4" aria-hidden />
               </Button>
             </div>
           </div>

@@ -21,6 +21,7 @@ This runbook covers operational instructions for staff and administrators at the
   - Open `/scan` on each phone and allow camera permissions.
   - Test test-scans under ambient lighting.
   - Ensure all phones are 100% charged and spare power banks are packed.
+- [ ] **Confirm Team List**: Confirm the final team list and spellings with the client before opening registration.
 - [ ] **Configure Event Settings**:
   - Open `/admin/settings` as admin.
   - Set `registration_open` and `checkin_open` windows.

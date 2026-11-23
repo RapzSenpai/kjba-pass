@@ -106,13 +106,18 @@ Deno.serve(async (req) => {
   const callerName = callerStaff.full_name
 
   // Parse body (already size-checked above)
-  let body: Record<string, unknown>
+  let parsed: unknown
   try {
-    body = await req.json()
+    parsed = await req.json()
   } catch {
     return json({ ok: false, code: 'invalid_input', message: 'Invalid JSON.' }, 400, origin)
   }
 
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return json({ ok: false, code: 'invalid_input', message: 'Invalid request body.' }, 400, origin)
+  }
+
+  const body = parsed as Record<string, unknown>
   const action = body.action
 
   // ─── ACTION: create ───────────────────────────────────────────────────────
@@ -183,7 +188,13 @@ Deno.serve(async (req) => {
 
     if (insertError) {
       // Clean up orphan Auth user
-      await adminClient.auth.admin.deleteUser(userId)
+      const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId)
+      if (deleteError) {
+        return json(
+          { ok: false, code: 'server_error', message: `Staff record failed; Auth user ${userId} still exists. Delete it manually in Supabase.` },
+          500, origin,
+        )
+      }
       return json({ ok: false, code: 'server_error', message: 'Account created but could not save staff record. Auth user cleaned up.' }, 500, origin)
     }
 
@@ -234,7 +245,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, code: 'not_allowed', message: 'Cannot reset admin passwords here.' }, 403, origin)
     }
 
-    const { error: resetError } = await adminClient.auth.admin.updateUserById(targetId, { password })
+    const { data: updatedUser, error: resetError } = await adminClient.auth.admin.updateUserById(targetId, { password })
     if (resetError) {
       return json({ ok: false, code: 'server_error', message: 'Could not reset password.' }, 500, origin)
     }
@@ -245,7 +256,7 @@ Deno.serve(async (req) => {
       result: 'success', details: { target_user_id: targetId, target_name: target.full_name },
     })
 
-    return json({ ok: true }, 200, origin)
+    return json({ ok: true, email: updatedUser.user?.email ?? null }, 200, origin)
   }
 
   // ─── ACTION: set_active ───────────────────────────────────────────────────
@@ -262,7 +273,7 @@ Deno.serve(async (req) => {
 
     const { data: target } = await adminClient
       .from('staff')
-      .select('full_name, role, station')
+      .select('full_name, role, station, active')
       .eq('user_id', targetId)
       .single()
 
@@ -295,9 +306,22 @@ Deno.serve(async (req) => {
     })
 
     if (banError) {
-      // Revert staff.active on Auth failure
-      await adminClient.from('staff').update({ active: !active }).eq('user_id', targetId)
-      return json({ ok: false, code: 'server_error', message: 'Could not sync auth status. Changes reverted.' }, 500, origin)
+      // Revert only if the row still holds the value this request wrote.
+      const { error: revertError } = await adminClient
+        .from('staff')
+        .update({ active: target.active })
+        .eq('user_id', targetId)
+        .eq('active', active)
+      return json(
+        {
+          ok: false,
+          code: 'server_error',
+          message: revertError
+            ? 'Could not sync auth status. Check this staff member manually.'
+            : 'Could not sync auth status. Changes reverted.',
+        },
+        500, origin,
+      )
     }
 
     await adminClient.from('activity_logs').insert({

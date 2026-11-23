@@ -28,6 +28,53 @@ const stationOptions = (Object.keys(stationLabels) as Station[]).map((value) => 
   label: stationLabels[value],
 }))
 
+function RowActions({
+  row,
+  isSelf,
+  busy,
+  onReset,
+  onToggle,
+}: {
+  row: StaffRow
+  isSelf: boolean
+  busy: boolean
+  onReset: () => void
+  onToggle: () => void
+}) {
+  if (row.role === 'admin') return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 px-3 text-sm"
+        disabled={busy}
+        onClick={onReset}
+      >
+        Reset password
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn(
+          'h-9 px-3 text-sm',
+          row.active
+            ? 'border-[var(--stop)]/30 text-[var(--stop-text)] hover:bg-[var(--stop-soft)]'
+            : 'border-[var(--success)]/30 text-[var(--success-text)] hover:bg-[var(--success-soft)]',
+        )}
+        disabled={busy || isSelf}
+        title={isSelf ? 'You cannot deactivate yourself' : undefined}
+        onClick={onToggle}
+      >
+        {busy ? '…' : row.active ? 'Deactivate' : 'Activate'}
+      </Button>
+    </div>
+  )
+}
+
 export function StaffPage() {
   const queryClient = useQueryClient()
   const { session } = useSession()
@@ -55,8 +102,13 @@ export function StaffPage() {
   async function updateStation(userId: string, station: Station) {
     setPendingId(userId)
     try {
-      const { error } = await supabase.from('staff').update({ station }).eq('user_id', userId)
-      if (error) {
+      const { data, error } = await supabase
+        .from('staff')
+        .update({ station })
+        .eq('user_id', userId)
+        .select('user_id')
+
+      if (error || data?.length !== 1) {
         toast.error('Could not update station. Try again.')
         return
       }
@@ -90,50 +142,10 @@ export function StaffPage() {
     }
   }
 
-  // ─── Row actions ──────────────────────────────────────────────────────────
-  function RowActions({ row }: { row: StaffRow }) {
-    const isSelf = row.user_id === session?.user.id
-    const isAdmin = row.role === 'admin'
-    const busy = pendingId === row.user_id
-
-    if (isAdmin) return null
-
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-9 px-3 text-sm"
-          disabled={busy}
-          onClick={() => setResetTarget(row)}
-        >
-          Reset password
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={cn(
-            'h-9 px-3 text-sm',
-            row.active
-              ? 'border-[var(--stop)]/30 text-[var(--stop-text)] hover:bg-[var(--stop-soft)]'
-              : 'border-[var(--success)]/30 text-[var(--success-text)] hover:bg-[var(--success-soft)]',
-          )}
-          disabled={busy || isSelf}
-          title={isSelf ? 'You cannot deactivate yourself' : undefined}
-          onClick={() => setConfirmToggle({ row, next: !row.active })}
-        >
-          {busy ? '…' : row.active ? 'Deactivate' : 'Activate'}
-        </Button>
-      </div>
-    )
-  }
-
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Staff</h1>
+        <h1 className="text-2xl font-semibold">Staff Management</h1>
         <div className="flex gap-2">
           <Button
             type="button"
@@ -154,11 +166,6 @@ export function StaffPage() {
           </Button>
         </div>
       </div>
-
-      <p className="text-xs text-muted-foreground">
-        Admin accounts are created in Supabase. See{' '}
-        <code className="rounded bg-muted px-1 py-0.5">supabase/templates/create_admin.sql</code>.
-      </p>
 
       {staff.isError && !staff.data ? (
         <div className="flex flex-col items-start gap-3">
@@ -235,7 +242,13 @@ export function StaffPage() {
                         {formatDateTime(row.last_active_at)}
                       </td>
                       <td className="px-3 py-3">
-                        <RowActions row={row} />
+                        <RowActions
+                          row={row}
+                          isSelf={isSelf}
+                          busy={busy}
+                          onReset={() => setResetTarget(row)}
+                          onToggle={() => setConfirmToggle({ row, next: !row.active })}
+                        />
                       </td>
                     </tr>
                   )
@@ -299,7 +312,13 @@ export function StaffPage() {
                     </div>
                   </dl>
 
-                  <RowActions row={row} />
+                  <RowActions
+                    row={row}
+                    isSelf={isSelf}
+                    busy={busy}
+                    onReset={() => setResetTarget(row)}
+                    onToggle={() => setConfirmToggle({ row, next: !row.active })}
+                  />
                 </li>
               )
             })}
@@ -330,7 +349,7 @@ export function StaffPage() {
         description={
           confirmToggle?.next
             ? `${confirmToggle.row.full_name} will be able to log in and scan again.`
-            : `${confirmToggle?.row.full_name} will be signed out and blocked from logging in.`
+            : `${confirmToggle?.row.full_name} will lose scan access and be blocked from logging in.`
         }
         confirmLabel={confirmToggle?.next ? 'Activate' : 'Deactivate'}
         destructive={!confirmToggle?.next}

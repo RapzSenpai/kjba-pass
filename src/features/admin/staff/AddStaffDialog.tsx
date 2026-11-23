@@ -1,5 +1,5 @@
 import { Eye, EyeOff, RefreshCw } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -35,6 +35,8 @@ export function AddStaffDialog({
   onSuccess: () => void
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const portalContainerRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
   const [showPw, setShowPw] = useState(false)
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null)
 
@@ -56,11 +58,13 @@ export function AddStaffDialog({
     const dialog = dialogRef.current
     if (!dialog) return
     if (open) {
-      reset({ station: 'entrance', password: generatePassword() })
-      setCredentials(null)
-      setShowPw(false)
-      dialog.showModal()
-    } else {
+      if (!dialog.open) {
+        reset({ station: 'entrance', password: generatePassword() })
+        setCredentials(null)
+        setShowPw(false)
+        dialog.showModal()
+      }
+    } else if (dialog.open) {
       dialog.close()
     }
   }, [open, reset])
@@ -89,16 +93,20 @@ export function AddStaffDialog({
     onClose()
   }
 
-  if (!open) return null
-
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (!isSubmitting) onClose()
+      }}
       onClose={onClose}
-      className="w-full max-w-sm rounded-xl border border-border bg-card p-0 shadow-xl backdrop:bg-black/40 open:flex open:flex-col"
+      className="relative m-auto w-[calc(100%-2rem)] max-w-sm overflow-visible rounded-xl border border-border bg-card p-0 shadow-xl backdrop:bg-black/40 open:flex open:flex-col"
     >
+      <div ref={portalContainerRef} className="absolute inset-0 pointer-events-none overflow-visible" />
       <div className="flex flex-col gap-5 p-6">
-        <h2 className="text-lg font-semibold">Add staff account</h2>
+        <h2 id={titleId} className="text-lg font-semibold">Add staff account</h2>
 
         {credentials ? (
           <StaffCredentialsPanel
@@ -139,6 +147,7 @@ export function AddStaffDialog({
               value={station}
               onValueChange={(v) => setValue('station', v as Station)}
               options={stationOptions}
+              container={portalContainerRef}
             />
             {errors.station && (
               <span className="text-xs text-destructive">{errors.station.message}</span>

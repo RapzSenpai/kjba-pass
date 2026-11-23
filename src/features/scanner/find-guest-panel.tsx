@@ -95,12 +95,27 @@ export function FindGuestPanel({
 
             return (
               <li key={guest.id} className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="me-auto text-base font-medium break-words">{guest.name}</span>
-                  {guest.checked_in_at ? <StatusBadge tone="success">Checked in</StatusBadge> : null}
-                  {guest.cocktail_claimed ? <StatusBadge tone="success">Cocktail</StatusBadge> : null}
-                  {guest.bundle_claimed ? <StatusBadge tone="success">Bundle</StatusBadge> : null}
-                  {guest.voided ? <StatusBadge tone="stop">Voided</StatusBadge> : null}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-base font-medium break-words">{guest.name}</p>
+                    {guest.team ? (
+                      <p className="text-xs text-muted-foreground">
+                        {guest.team} · {guest.site}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    {guest.checked_in_at ? (
+                      <StatusBadge tone="success">Checked in</StatusBadge>
+                    ) : null}
+                    {guest.cocktail_claimed ? (
+                      <StatusBadge tone="success">Cocktail</StatusBadge>
+                    ) : null}
+                    {guest.bundle_claimed ? (
+                      <StatusBadge tone="success">Bundle</StatusBadge>
+                    ) : null}
+                    {guest.voided ? <StatusBadge tone="stop">Voided</StatusBadge> : null}
+                  </div>
                 </div>
                 <Button
                   type="button"

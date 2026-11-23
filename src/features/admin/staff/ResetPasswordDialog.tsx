@@ -1,5 +1,5 @@
 import { Eye, EyeOff, RefreshCw } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -18,18 +18,18 @@ export function ResetPasswordDialog({
   open,
   targetId,
   targetName,
-  targetEmail,
   onClose,
   onSuccess,
 }: {
   open: boolean
   targetId: string
   targetName: string
-  targetEmail?: string
   onClose: () => void
   onSuccess: () => void
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+  const operationRef = useRef(0)
   const [showPw, setShowPw] = useState(false)
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null)
 
@@ -48,25 +48,34 @@ export function ResetPasswordDialog({
     const dialog = dialogRef.current
     if (!dialog) return
     if (open) {
-      reset({ password: generatePassword() })
-      setCredentials(null)
-      setShowPw(false)
-      dialog.showModal()
+      if (!dialog.open) {
+        operationRef.current += 1
+        reset({ password: generatePassword() })
+        setCredentials(null)
+        setShowPw(false)
+        dialog.showModal()
+      }
     } else {
-      dialog.close()
+      operationRef.current += 1
+      if (dialog.open) dialog.close()
     }
   }, [open, reset])
 
   async function onSubmit(values: FormValues) {
+    const operationAtSubmit = operationRef.current
     const result = await resetStaffPassword({ user_id: targetId, password: values.password })
 
     if (!result.ok) {
-      toast.error(result.message ?? mapError(result.code))
+      if (operationAtSubmit === operationRef.current) {
+        toast.error(result.message ?? mapError(result.code))
+      }
       return
     }
 
-    setCredentials({ email: targetEmail ?? '(see dashboard)', password: values.password })
     onSuccess()
+    if (operationAtSubmit !== operationRef.current) return
+
+    setCredentials({ email: result.email ?? '(no email on file)', password: values.password })
     toast.success('Password reset.')
   }
 
@@ -75,16 +84,19 @@ export function ResetPasswordDialog({
     onClose()
   }
 
-  if (!open) return null
-
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (!isSubmitting) onClose()
+      }}
       onClose={onClose}
-      className="w-full max-w-sm rounded-xl border border-border bg-card p-0 shadow-xl backdrop:bg-black/40 open:flex open:flex-col"
+      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-xl border border-border bg-card p-0 shadow-xl backdrop:bg-black/40 open:flex open:flex-col"
     >
       <div className="flex flex-col gap-5 p-6">
-        <h2 className="text-lg font-semibold">Reset password — {targetName}</h2>
+        <h2 id={titleId} className="text-lg font-semibold">Reset password — {targetName}</h2>
 
         {credentials ? (
           <StaffCredentialsPanel
@@ -93,6 +105,7 @@ export function ResetPasswordDialog({
             onClose={handleCredentialsDone}
           />
         ) : (
+          // oxlint-disable-next-line react/refs -- handleSubmit invokes this in an event, not render
           <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
             <label className="flex flex-col gap-1.5 text-sm font-medium">
               New password

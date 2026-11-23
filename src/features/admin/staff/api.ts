@@ -18,9 +18,15 @@ async function call<T = Record<string, never>>(
   body: Record<string, unknown>,
 ): Promise<ManageStaffResult<T>> {
   try {
+    // Explicitly pass the session JWT — functions.invoke doesn't always auto-attach it.
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: Record<string, string> = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {}
+
     const { data, error } = await supabase.functions.invoke<ManageStaffResult<T>>(
       'manage-staff',
-      { body },
+      { body, headers },
     )
     if (error) {
       if (error instanceof FunctionsHttpError) {
@@ -51,8 +57,8 @@ export function createStaff(params: {
 export function resetStaffPassword(params: {
   user_id: string
   password: string
-}): Promise<ManageStaffResult> {
-  return call({ action: 'reset_password', ...params })
+}): Promise<ManageStaffResult<{ email: string | null }>> {
+  return call<{ email: string | null }>({ action: 'reset_password', ...params })
 }
 
 export function setStaffActive(params: {

@@ -22,6 +22,10 @@ export function formatDateTime(value: string | null | undefined): string {
   return value ? dateTimeFormat.format(new Date(value)) : EMPTY
 }
 
+export function formatDate(value: string | null | undefined): string {
+  return value ? dateFormat.format(new Date(value)) : EMPTY
+}
+
 export function formatTime(value: string | null | undefined): string {
   return value ? timeFormat.format(new Date(value)) : EMPTY
 }

@@ -96,6 +96,11 @@ export function PassPage() {
       <header className="flex flex-col items-center gap-1 text-center">
         <p className="text-sm text-muted-foreground">Guest pass</p>
         <h1 className="text-3xl font-semibold break-words">{pass.name}</h1>
+        {pass.team ? (
+          <p className="text-sm text-muted-foreground">
+            {pass.team} · {pass.site}
+          </p>
+        ) : null}
       </header>
 
       {pass.voided ? (

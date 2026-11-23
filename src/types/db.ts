@@ -5,6 +5,23 @@ export type StaffRole = 'admin' | 'staff'
 export type Station = 'entrance' | 'cocktail' | 'bundle'
 export type ClaimStation = 'cocktail' | 'bundle'
 export type ClaimMethod = 'scan' | 'code' | 'manual'
+export type TeamSite = 'Toledo' | 'Talisay'
+
+export type Team = {
+  id: string
+  name: string
+  site: TeamSite
+}
+
+export type TeamStats = {
+  id: string | null
+  name: string
+  site: TeamSite | 'Unassigned'
+  registered: number
+  eligible: number
+  cocktail_claimed: number
+  bundle_claimed: number
+}
 
 export type LogAction =
   | 'register'
@@ -53,11 +70,29 @@ export type PublicSettings = {
   registration_closes_at: string | null
 }
 
+export type RegisterRequest = {
+  name: string
+  team_id: string
+  turnstileToken: string
+}
+
 export type RegisterResult =
-  | { ok: true; name: string; token: string; backup_code: string }
+  | {
+      ok: true
+      name: string
+      token: string
+      backup_code: string
+      team: string
+      site: TeamSite
+    }
   | {
       ok: false
-      code: 'registration_closed' | 'invalid_name' | 'name_exists' | 'turnstile_failed'
+      code:
+        | 'registration_closed'
+        | 'invalid_name'
+        | 'name_exists'
+        | 'invalid_team'
+        | 'turnstile_failed'
       message: string
     }
 
@@ -65,6 +100,8 @@ export type GuestPass =
   | {
       ok: true
       name: string
+      team: string | null
+      site: TeamSite | null
       token: string
       backup_code: string
       checked_in: boolean
@@ -101,6 +138,8 @@ export type StationResult =
 export type SearchGuest = {
   id: string
   name: string
+  team: string | null
+  site: TeamSite | null
   checked_in_at: string | null
   voided: boolean
   cocktail_claimed: boolean
@@ -110,6 +149,9 @@ export type SearchGuest = {
 export type GuestOverviewRow = {
   id: string
   name: string
+  team_id: string | null
+  team: string | null
+  site: TeamSite | null
   created_at: string
   checked_in_at: string | null
   checked_in_method: ClaimMethod | null

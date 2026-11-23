@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, code: 'method_not_allowed', message: 'POST only.' }, 405, origin)
   }
 
-  let payload: { name?: unknown; turnstileToken?: unknown }
+  let payload: { name?: unknown; team_id?: unknown; turnstileToken?: unknown }
   try {
     payload = await req.json()
   } catch {
@@ -56,12 +56,16 @@ Deno.serve(async (req) => {
   }
 
   const name = payload.name
+  const teamId = payload.team_id
   const turnstileToken = payload.turnstileToken
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
   if (
     typeof name !== 'string' ||
+    typeof teamId !== 'string' ||
     typeof turnstileToken !== 'string' ||
     name.length > 200 ||
+    !uuidPattern.test(teamId) ||
     turnstileToken.length === 0
   ) {
     return json({ ok: false, code: 'invalid_request', message: 'Invalid request.' }, 400, origin)
@@ -117,7 +121,10 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  const { data, error } = await supabase.rpc('register_guest_internal', { p_name: name })
+  const { data, error } = await supabase.rpc('register_guest_internal', {
+    p_name: name,
+    p_team_id: teamId,
+  })
 
   if (error) {
     console.error('register-guest: rpc failed')

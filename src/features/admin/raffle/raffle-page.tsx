@@ -1,11 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, Plus } from 'lucide-react'
+import { Copy, Download, Plus, Trophy } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { StatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/common/checkbox'
+import { Switch } from '@/components/ui/switch'
+import { SelectField } from '@/components/common/select-field'
 import { formatDateTime, manilaDateStamp } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
 import type { AdminResult, RafflePoolEntry, SettingsRow, WinnerWithGuest } from '@/types/db'
@@ -67,8 +68,9 @@ function AddWinnerDialog({
   onCancel: () => void
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const portalContainerRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
-  const [query, setQuery] = useState('')
+  const guestId = useId()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [prize, setPrize] = useState('')
 
@@ -77,7 +79,6 @@ function AddWinnerDialog({
     if (!dialog) return
 
     if (open && !dialog.open) {
-      setQuery('')
       setSelectedId(null)
       setPrize('')
       dialog.showModal()
@@ -86,8 +87,6 @@ function AddWinnerDialog({
     }
   }, [open])
 
-  const term = query.trim().toLowerCase()
-  const results = pool.filter((entry) => !term || entry.name.toLowerCase().includes(term)).slice(0, 8)
   const selected = pool.find((entry) => entry.id === selectedId) ?? null
 
   return (
@@ -98,8 +97,9 @@ function AddWinnerDialog({
         event.preventDefault()
         if (!pending) onCancel()
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-border bg-card p-0 text-card-foreground backdrop:bg-foreground/40"
+      className="relative m-auto w-[calc(100%-2rem)] max-w-md overflow-visible rounded-xl border border-border bg-card p-0 text-card-foreground backdrop:bg-foreground/40"
     >
+      <div ref={portalContainerRef} className="pointer-events-none absolute inset-0 overflow-visible" />
       <form
         onSubmit={(event) => {
           event.preventDefault()
@@ -111,47 +111,19 @@ function AddWinnerDialog({
           <h2 id={titleId} className="text-lg font-semibold">
             Add winner
           </h2>
-          <p className="text-sm text-muted-foreground">Search the raffle pool, then enter the prize.</p>
+          <p className="text-sm text-muted-foreground">Choose a guest from the pool, then enter the prize.</p>
         </div>
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          Guest
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search pool by name"
-            autoComplete="off"
-            className="h-11 rounded-lg border border-input bg-background px-3 text-base font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </label>
-
-        <div className="max-h-56 overflow-y-auto rounded-lg border border-border">
-          {results.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-muted-foreground">No eligible guest matches.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {results.map((entry) => (
-                <li key={entry.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(entry.id)}
-                    className={
-                      entry.id === selectedId
-                        ? 'w-full bg-muted px-3 py-2 text-start text-sm font-medium'
-                        : 'w-full px-3 py-2 text-start text-sm hover:bg-muted/60'
-                    }
-                  >
-                    {entry.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <p className="text-sm">
-          Selected: <span className="font-medium">{selected?.name ?? 'None'}</span>
-        </p>
+        <SelectField
+          id={guestId}
+          label="Guest"
+          value={selectedId}
+          onValueChange={setSelectedId}
+          options={pool.map((entry) => ({ value: entry.id, label: entry.name }))}
+          placeholder={pool.length === 0 ? 'No eligible guests' : 'Select a guest'}
+          disabled={pool.length === 0}
+          container={portalContainerRef}
+        />
 
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           Prize
@@ -196,6 +168,7 @@ function AddWinnerDialog({
 
 export function RafflePage() {
   const queryClient = useQueryClient()
+  const lockId = useId()
   const [addOpen, setAddOpen] = useState(false)
   const [addPending, setAddPending] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
@@ -213,6 +186,7 @@ export function RafflePage() {
       if (error) throw error
       return (data ?? []) as RafflePoolEntry[]
     },
+    refetchInterval: 5000,
   })
 
   const winners = useQuery({
@@ -230,6 +204,7 @@ export function RafflePage() {
         return { ...rest, guest_name: winnerGuestName(guests) }
       })
     },
+    refetchInterval: 5000,
   })
 
   const settings = useQuery({
@@ -409,6 +384,8 @@ export function RafflePage() {
 
   const locked = settings.data?.raffle_locked ?? false
   const winnerRows = winners.data ?? []
+  const poolCount = pool.data?.length
+  const hasPool = (poolCount ?? 0) > 0
 
   return (
     <section className="flex flex-col gap-6">
@@ -417,10 +394,11 @@ export function RafflePage() {
         <Button
           type="button"
           className="h-11 px-4 text-base"
-          disabled={pool.isPending || !pool.data}
+          disabled={pool.isPending || !hasPool}
           onClick={() => {
             setAddError(null)
             setAddOpen(true)
+            void pool.refetch()
           }}
         >
           <Plus className="size-4" aria-hidden />
@@ -432,21 +410,26 @@ export function RafflePage() {
         The wheel is an external site. Record winners here manually.
       </p>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+      <div className="grid overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-[3fr_2fr]">
+        <div className="flex min-w-0 flex-col gap-2.5 px-4 py-3">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-lg font-semibold">Raffle pool</h2>
-            <span className="text-2xl font-semibold tabular-nums">{pool.data?.length ?? '—'}</span>
+            <div className="flex shrink-0 items-baseline gap-1.5">
+              <span className="text-2xl font-semibold leading-none tabular-nums">
+                {poolCount === undefined ? '—' : poolCount.toLocaleString()}
+              </span>
+              <span className="text-xs font-medium text-muted-foreground">eligible</span>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Only checked-in, non-voided, not-yet-winning guests.
+            Checked in · not voided · not yet won.
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               type="button"
               variant="outline"
               className="h-11 px-4 text-base"
-              disabled={pool.isPending}
+              disabled={pool.isPending || !hasPool}
               onClick={() => void copyNames()}
             >
               <Copy className="size-4" aria-hidden />
@@ -454,24 +437,53 @@ export function RafflePage() {
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="h-11 px-4 text-base"
-              disabled={pool.isPending || downloading}
+              variant="ghost"
+              className="h-11 px-4 text-base text-muted-foreground hover:text-foreground"
+              disabled={pool.isPending || downloading || !hasPool}
               onClick={() => void downloadNames()}
             >
               <Download className="size-4" aria-hidden />
-              {downloading ? 'Downloading…' : 'Download .txt'}
+              {downloading ? 'Downloading…' : 'Download names'}
             </Button>
           </div>
+          {!pool.isPending && !hasPool && !pool.isError ? (
+            <p className="text-xs text-muted-foreground">
+              No eligible guests yet. Check in guests at the entrance.
+            </p>
+          ) : null}
           {pool.isError && !pool.data ? (
-            <p className="text-sm text-muted-foreground">Could not load the raffle pool.</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-destructive">Could not load the raffle pool.</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => void pool.refetch()}
+              >
+                Try again
+              </Button>
+            </div>
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-          <h2 className="text-lg font-semibold">Pool lock</h2>
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <Checkbox
+        <div className="flex min-w-0 flex-col gap-2.5 border-t border-border px-4 py-3 lg:border-t-0 lg:border-l">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Pool lock</h2>
+            <StatusBadge tone={locked ? 'stop' : 'success'} className="shrink-0">
+              {locked ? 'Locked' : 'Open'}
+            </StatusBadge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            While locked, nobody can check in. Existing claims are unaffected.
+          </p>
+          <div className="mt-auto flex items-center justify-between gap-3">
+            <label htmlFor={lockId} className="text-sm font-medium">
+              Lock raffle pool
+            </label>
+            <Switch
+              id={lockId}
+              aria-label="Lock raffle pool"
               checked={locked}
               disabled={settings.isPending || lockPending || !settings.data}
               onCheckedChange={(next) => {
@@ -479,12 +491,7 @@ export function RafflePage() {
                 else void updateLock(false)
               }}
             />
-            Lock raffle pool
-          </label>
-          <p className="text-sm text-muted-foreground">
-            While locked, nobody can check in. Existing claims are unaffected.
-          </p>
-          {locked ? <StatusBadge tone="stop">Locked</StatusBadge> : <StatusBadge tone="success">Open</StatusBadge>}
+          </div>
         </div>
       </div>
 
@@ -496,9 +503,15 @@ export function RafflePage() {
         ) : winners.isPending ? (
           <p className="text-sm text-muted-foreground">Loading winners…</p>
         ) : winnerRows.length === 0 ? (
-          <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-            No winners recorded yet.
-          </p>
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card py-10 text-center">
+            <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Trophy className="size-5" aria-hidden />
+            </span>
+            <p className="text-sm font-medium">No winners recorded yet</p>
+            <p className="text-xs text-muted-foreground">
+              After each wheel spin, record the winner here.
+            </p>
+          </div>
         ) : (
           <>
             <div className="hidden overflow-x-auto rounded-xl border border-border bg-card md:block">
@@ -535,9 +548,9 @@ export function RafflePage() {
                           ) : (
                             <Button
                               type="button"
-                              variant="outline"
+                              variant="ghost"
                               size="sm"
-                              className="h-8 px-2.5 text-xs"
+                              className="h-8 px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                               onClick={() => setVoidTarget(winner)}
                             >
                               Void
@@ -577,7 +590,7 @@ export function RafflePage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-11 w-full text-base"
+                      className="h-11 w-full text-base text-destructive hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => setVoidTarget(winner)}
                     >
                       Void winner

@@ -18,6 +18,8 @@ Run these once, in order:
 | `sql/08_functions_admin.sql` | Void, undo, raffle, dashboard, admin log |
 | `sql/09_grants.sql` | Revoke defaults, grant only the intended execute and column access |
 | `sql/10_seed.sql` | Insert the single settings row |
+| `sql/11_staff_management.sql` | Revoke direct `update (active)` on staff |
+| `sql/12_teams.sql` | Teams, sites, registration team requirement, per-team stats |
 | `sql/99_verify.sql` | Read-only checks after the files above; every row must say PASS |
 
 Tick each row in `APPLIED.md` after running it.
@@ -30,12 +32,15 @@ When a new function is added later, run its `grant execute` line in a new number
 |---|---|
 | `settings` | Single row: event info, registration and check-in windows, station switches |
 | `staff` | Staff and admin accounts, role and station, active flag |
-| `guests` | Registered guests, token, backup code, check-in, void |
+| `guests` | Registered guests, token, backup code, team, check-in, void |
+| `teams` | Team names and their site (Toledo or Talisay) |
 | `claims` | One row per guest per station (cocktail, bundle) |
 | `winners` | Raffle winners log |
 | `activity_logs` | Append-only audit trail |
 
-Views: `raffle_pool` (eligible names for the wheel), `guest_overview` (admin guest list with claim flags, no secrets).
+Views: `raffle_pool` (eligible names for the wheel), `guest_overview` (admin guest list with claim flags, team, site, no secrets).
+
+Functions: `get_teams()` feeds the registration dropdown; `team_stats()` feeds the dashboard's per-team counts. Both are granted explicitly in `12_teams.sql`.
 
 ## Auth setup
 
@@ -101,4 +106,5 @@ Written in Phase 8.
 | `sql/09_grants.sql` | Revoke defaults, grant column/execute access |
 | `sql/10_seed.sql` | Insert settings row |
 | `sql/11_staff_management.sql` | Revoke direct `update (active)` on staff |
+| `sql/12_teams.sql` | Teams, sites, registration team requirement, per-team stats |
 | `sql/99_verify.sql` | Read-only PASS/FAIL checks |

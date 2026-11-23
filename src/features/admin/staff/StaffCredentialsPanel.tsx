@@ -24,7 +24,7 @@ export function StaffCredentialsPanel({
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-[var(--success)]/30 bg-[var(--success-soft)] p-4 text-[var(--success-text)]">
-      <p className="text-sm font-semibold">Account created — save these credentials now.</p>
+      <p className="text-sm font-semibold">Save these credentials now.</p>
 
       <dl className="flex flex-col gap-2 text-sm">
         <div className="flex flex-col gap-0.5">

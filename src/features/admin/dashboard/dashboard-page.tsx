@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Ban,
   ChevronDown,
+  ChevronRight,
   Gift,
   Martini,
   Trophy,
@@ -17,7 +19,7 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/common/status-badge'
-import type { ActivityLogRow, DashboardStats } from '@/types/db'
+import type { ActivityLogRow, DashboardStats, TeamSite, TeamStats } from '@/types/db'
 
 type RecentActivity = Pick<
   ActivityLogRow,
@@ -47,23 +49,27 @@ function StatCard({
   value,
   caption,
   progress,
+  className,
 }: {
   icon: LucideIcon
   label: string
   value: number
   caption: string
   progress?: { value: number; max: number }
+  className?: string
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-        <Icon className="size-5" aria-hidden />
-      </span>
-      <div className="flex flex-col gap-1">
-        <span className="text-sm text-muted-foreground">{label}</span>
-        <span className="text-3xl font-semibold tabular-nums">{value}</span>
+    <div className={cn('flex flex-col gap-3 p-4 sm:p-5', className)}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-muted-foreground">{label}</span>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+          <Icon className="size-4" aria-hidden />
+        </span>
       </div>
-      <div className="mt-auto flex flex-col gap-1.5">
+      <div>
+        <span className="text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{value}</span>
+      </div>
+      <div className="mt-auto flex flex-col gap-1.5 pt-1">
         {progress ? <ProgressBar value={progress.value} max={progress.max} label={label} /> : null}
         <span className="text-xs text-muted-foreground">{caption}</span>
       </div>
@@ -77,19 +83,21 @@ const smallCardTones = {
   neutral: 'bg-muted text-muted-foreground',
 } as const
 
-function SmallCard({
+function SummaryStat({
   icon: Icon,
   label,
   value,
+  caption,
   tone,
 }: {
   icon: LucideIcon
   label: string
   value: number
+  caption: string
   tone: keyof typeof smallCardTones
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+    <div className="flex items-center gap-3 p-3 sm:p-4">
       <span
         className={cn(
           'flex size-9 shrink-0 items-center justify-center rounded-lg',
@@ -99,11 +107,97 @@ function SmallCard({
         <Icon className="size-5" aria-hidden />
       </span>
       <div className="flex min-w-0 flex-col">
-        <span className="truncate text-xs text-muted-foreground">{label}</span>
-        <span className="text-xl font-semibold tabular-nums">{value}</span>
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="flex flex-wrap items-baseline gap-x-1.5">
+          <span className="text-xl font-semibold tabular-nums sm:text-2xl">{value}</span>
+          <span className="text-xs text-muted-foreground">{caption}</span>
+        </span>
       </div>
     </div>
   )
+}
+
+function TeamStatRow({ team }: { team: TeamStats }) {
+  return (
+    <Link
+      to={team.id ? `/admin/guests?team=${team.id}` : '/admin/guests?team=none'}
+      className="group flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className="line-clamp-2 min-w-0 text-sm" title={team.name}>
+        {team.name}
+      </span>
+      <span className="flex shrink-0 items-center gap-1.5 text-sm tabular-nums">
+        <span className="font-semibold">{team.eligible}</span>
+        <span className="text-muted-foreground">/ {team.registered}</span>
+        <ChevronRight
+          className="size-3.5 text-muted-foreground opacity-40 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-visible:opacity-100"
+          aria-hidden
+        />
+      </span>
+    </Link>
+  )
+}
+
+function SiteSection({
+  site,
+  rows,
+  className,
+}: {
+  site: TeamSite | 'Unassigned'
+  rows: TeamStats[]
+  className?: string
+}) {
+  const [showEmpty, setShowEmpty] = useState(false)
+  const present = rows.reduce((sum, row) => sum + row.eligible, 0)
+  const registered = rows.reduce((sum, row) => sum + row.registered, 0)
+  const emptyCount = rows.filter((row) => row.registered === 0).length
+  const visibleRows = showEmpty ? rows : rows.filter((row) => row.registered > 0)
+  const href = site === 'Unassigned' ? '/admin/guests?team=none' : `/admin/guests?site=${site}`
+
+  return (
+    <div className={cn('flex flex-col gap-1', className)}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-2">
+        <Link
+          to={href}
+          className="text-base font-semibold underline-offset-4 hover:underline"
+        >
+          {site}
+        </Link>
+        <span className="text-xs text-muted-foreground">
+          {present} present · {registered} registered
+        </span>
+      </div>
+
+      {visibleRows.length > 0 ? (
+        <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2 xl:grid-cols-3">
+          {visibleRows.map((team) => (
+            <TeamStatRow key={team.id ?? team.name} team={team} />
+          ))}
+        </div>
+      ) : null}
+
+      {emptyCount > 0 ? (
+        <button
+          type="button"
+          aria-expanded={showEmpty}
+          onClick={() => setShowEmpty((current) => !current)}
+          className="flex min-h-11 w-full flex-wrap items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span>
+            {emptyCount} {emptyCount === 1 ? 'team has' : 'teams have'} no registrations yet.
+          </span>
+          <span className="font-medium underline underline-offset-4">
+            {showEmpty ? 'Hide' : 'Show all'}
+          </span>
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+type DashboardData = {
+  stats: DashboardStats
+  teams: TeamStats[]
 }
 
 type ActivityGroup =
@@ -149,12 +243,21 @@ function resultTone(result: string | null) {
 export function DashboardPage() {
   const stats = useQuery({
     queryKey: ['dashboard_stats'],
-    queryFn: async (): Promise<DashboardStats> => {
-      const { data, error } = await supabase.rpc('dashboard_stats')
-      if (error) throw error
-      return data as DashboardStats
+    queryFn: async (): Promise<DashboardData> => {
+      const [statsResult, teamsResult] = await Promise.all([
+        supabase.rpc('dashboard_stats'),
+        supabase.rpc('team_stats'),
+      ])
+
+      if (statsResult.error) throw statsResult.error
+      if (teamsResult.error) throw teamsResult.error
+
+      return {
+        stats: statsResult.data as DashboardStats,
+        teams: (teamsResult.data ?? []) as TeamStats[],
+      }
     },
-    refetchInterval: 5000,
+    refetchInterval: () => (document.visibilityState === 'visible' ? 5000 : false),
   })
 
   const recent = useQuery({
@@ -187,8 +290,11 @@ export function DashboardPage() {
     )
   }
 
-  const s = stats.data
+  const s = stats.data.stats
+  const teamRows = stats.data.teams
+  const unassigned = teamRows.find((team) => team.site === 'Unassigned')
   const activity = recent.data ? groupActivity(recent.data) : []
+  const turnoutRate = s.registered > 0 ? Math.round((s.eligible / s.registered) * 100) : 0
 
   return (
     <section className="flex flex-col gap-6">
@@ -203,40 +309,97 @@ export function DashboardPage() {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          icon={Users}
-          label="Registered"
-          value={s.registered}
-          caption={`${s.not_checked_in} not checked in`}
-        />
-        <StatCard
-          icon={UserCheck}
-          label="Eligible (present)"
-          value={s.eligible}
-          caption={`${s.eligible} of ${s.registered} registered`}
-          progress={{ value: s.eligible, max: s.registered }}
-        />
-        <StatCard
-          icon={Martini}
-          label="Cocktail claimed"
-          value={s.cocktail_claimed}
-          caption={`${s.cocktail_claimed} of ${s.eligible} eligible`}
-          progress={{ value: s.cocktail_claimed, max: s.eligible }}
-        />
-        <StatCard
-          icon={Gift}
-          label="Bundle claimed"
-          value={s.bundle_claimed}
-          caption={`${s.bundle_claimed} of ${s.eligible} eligible`}
-          progress={{ value: s.bundle_claimed, max: s.eligible }}
-        />
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="grid auto-rows-fr grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            icon={Users}
+            label="Registered"
+            value={s.registered}
+            caption={`${s.eligible} checked in (${turnoutRate}%) · ${s.not_checked_in} pending`}
+            progress={{ value: s.eligible, max: s.registered }}
+          />
+          <StatCard
+            icon={UserCheck}
+            label="Eligible (present)"
+            value={s.eligible}
+            caption={`${s.eligible} of ${s.registered} registered`}
+            progress={{ value: s.eligible, max: s.registered }}
+            className="border-l border-border"
+          />
+          <StatCard
+            icon={Martini}
+            label="Cocktail claimed"
+            value={s.cocktail_claimed}
+            caption={`${s.cocktail_claimed} of ${s.eligible} eligible`}
+            progress={{ value: s.cocktail_claimed, max: s.eligible }}
+            className="border-t border-border lg:border-t-0 lg:border-l"
+          />
+          <StatCard
+            icon={Gift}
+            label="Bundle claimed"
+            value={s.bundle_claimed}
+            caption={`${s.bundle_claimed} of ${s.eligible} eligible`}
+            progress={{ value: s.bundle_claimed, max: s.eligible }}
+            className="border-t border-l border-border lg:border-t-0"
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <SmallCard icon={UserX} label="Not checked in" value={s.not_checked_in} tone="action" />
-        <SmallCard icon={Ban} label="Voided" value={s.voided} tone="stop" />
-        <SmallCard icon={Trophy} label="Winners" value={s.winners} tone="neutral" />
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <SummaryStat
+            icon={UserX}
+            label="Not checked in"
+            value={s.not_checked_in}
+            caption={`of ${s.registered} registered`}
+            tone="action"
+          />
+          <SummaryStat
+            icon={Ban}
+            label="Voided"
+            value={s.voided}
+            caption={`of ${s.registered} registered`}
+            tone="stop"
+          />
+          <SummaryStat
+            icon={Trophy}
+            label="Winners"
+            value={s.winners}
+            caption="drawn so far"
+            tone="neutral"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-semibold">By team</h2>
+          {teamRows.length > 0 ? (
+            <span className="text-xs text-muted-foreground">Present / Registered</span>
+          ) : null}
+        </div>
+        {teamRows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No teams yet.</p>
+        ) : (
+          <div className="flex flex-col">
+            <SiteSection
+              site="Toledo"
+              rows={teamRows.filter((team) => team.site === 'Toledo')}
+            />
+            <SiteSection
+              site="Talisay"
+              className="mt-4 border-t border-border pt-4"
+              rows={teamRows.filter((team) => team.site === 'Talisay')}
+            />
+            {unassigned ? (
+              <SiteSection
+                site="Unassigned"
+                className="mt-4 border-t border-border pt-4"
+                rows={[unassigned]}
+              />
+            ) : null}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

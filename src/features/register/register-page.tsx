@@ -1,30 +1,39 @@
 import { useState } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { Turnstile } from '@marsidev/react-turnstile'
+import { useQuery } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { FunctionsHttpError } from '@supabase/supabase-js'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/common/checkbox'
+import { SelectField } from '@/components/common/select-field'
 import { usePublicSettings } from '@/hooks/usePublicSettings'
 import { env } from '@/lib/env'
 import { formatEventDate } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
-import type { RegisterResult } from '@/types/db'
+import type { RegisterRequest, RegisterResult, Team } from '@/types/db'
 
 const TOKEN_KEY = 'kjba_pass_token'
 
-const nameSchema = z.object({
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const formSchema = z.object({
   name: z
     .string()
     .trim()
     .min(3, 'Enter your full name.')
     .max(80, 'Name is too long.')
     .regex(/^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$/, "Use letters, spaces, . - ' only."),
+  team_id: z
+    .string()
+    .min(1, 'Select your team.')
+    .refine((value) => UUID_PATTERN.test(value), 'Select your team.'),
 })
 
-type NameValues = z.infer<typeof nameSchema>
+type FormValues = z.infer<typeof formSchema>
 
 function readStoredToken(): string | null {
   try {
@@ -66,6 +75,15 @@ function PageState({ title, onRetry }: { title: string; onRetry?: () => void }) 
 
 export function RegisterPage() {
   const settings = usePublicSettings()
+  const teams = useQuery({
+    queryKey: ['teams'],
+    queryFn: async (): Promise<Team[]> => {
+      const { data, error } = await supabase.rpc('get_teams')
+      if (error) throw error
+      return (data ?? []) as Team[]
+    },
+    staleTime: 60 * 60 * 1000,
+  })
   const navigate = useNavigate()
   const [storedToken] = useState(readStoredToken)
   const [accepted, setAccepted] = useState(false)
@@ -78,40 +96,74 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
+    control,
+    setValue,
+    setError,
     formState: { errors, isSubmitting },
-  } = useForm<NameValues>({ resolver: zodResolver(nameSchema) })
+  } = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: { name: '', team_id: '' },
+  })
+
+  const teamId = useWatch({ control, name: 'team_id' })
+  const teamList = teams.data ?? []
+  const selectedTeam = teamList.find((team) => team.id === teamId)
+  const toledoTeams = teamList.filter((team) => team.site === 'Toledo')
+  const talisayTeams = teamList.filter((team) => team.site === 'Talisay')
+  const teamsUnavailable = teams.isError || (!teams.isPending && teamList.length === 0)
 
   function resetTurnstile() {
     setTurnstileToken(null)
     setTurnstileKey((key) => key + 1)
   }
 
-  async function onSubmit(values: NameValues) {
+  function showFailure(payload: RegisterResult | null) {
+    if (payload && !payload.ok) {
+      if (payload.code === 'invalid_team') {
+        setError('team_id', { message: payload.message })
+        return
+      }
+      setFormError(payload.message)
+      return
+    }
+    setFormError('Something went wrong. Please try again.')
+  }
+
+  async function onSubmit(values: FormValues) {
     if (!accepted || !turnstileToken) return
+
+    const team = teamList.find((item) => item.id === values.team_id)
+    if (!team) {
+      setError('team_id', { message: 'Select your team.' })
+      return
+    }
 
     setFormError(null)
 
+    const body: RegisterRequest = {
+      name: values.name,
+      team_id: team.id,
+      turnstileToken,
+    }
+
     const { data, error } = await supabase.functions.invoke<RegisterResult>('register-guest', {
-      body: { name: values.name, turnstileToken },
+      body,
     })
 
     if (error) {
-      const payload = await readInvokeError(error)
-      setFormError(
-        payload && !payload.ok ? payload.message : 'Something went wrong. Please try again.',
-      )
+      showFailure(await readInvokeError(error))
       resetTurnstile()
       return
     }
 
     if (!data) {
-      setFormError('Something went wrong. Please try again.')
+      showFailure(null)
       resetTurnstile()
       return
     }
 
     if (!data.ok) {
-      setFormError(data.message)
+      showFailure(data)
       resetTurnstile()
       return
     }
@@ -142,10 +194,13 @@ export function RegisterPage() {
       {storedToken ? (
         <Link
           to={`/g/${storedToken}`}
-          className="flex min-h-11 flex-col justify-center rounded-lg border border-border bg-muted px-3 py-2 text-sm"
+          className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2 text-sm"
         >
-          <span className="font-medium">You already registered on this device.</span>
-          <span className="text-muted-foreground">View my pass →</span>
+          <span className="flex min-w-0 flex-col">
+            <span className="font-medium">You already registered on this device.</span>
+            <span className="text-muted-foreground">View my pass</span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </Link>
       ) : null}
 
@@ -163,6 +218,20 @@ export function RegisterPage() {
             <p className="text-sm text-muted-foreground">Enter your full name. Duplicate names are not allowed.</p>
           </div>
 
+          {teamsUnavailable ? (
+            <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-muted p-3">
+              <p className="text-sm font-medium">Could not load teams.</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 px-4 text-base"
+                onClick={() => void teams.refetch()}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : null}
+
           <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
             <label className="flex flex-col gap-1.5 text-sm font-medium">
               Full name
@@ -176,6 +245,42 @@ export function RegisterPage() {
               {errors.name ? (
                 <span className="text-sm font-normal text-destructive">{errors.name.message}</span>
               ) : null}
+            </label>
+
+            <div className="flex flex-col gap-1.5">
+              <SelectField
+                id="register-team"
+                label="Team"
+                value={teamId || null}
+                onValueChange={(next) => setValue('team_id', next, { shouldValidate: true })}
+                placeholder="Select your team"
+                error={errors.team_id?.message}
+                disabled={teams.isPending || teamsUnavailable}
+                groups={[
+                  {
+                    label: 'Toledo Team',
+                    options: toledoTeams.map((team) => ({ value: team.id, label: team.name })),
+                  },
+                  {
+                    label: 'Talisay Team',
+                    options: talisayTeams.map((team) => ({ value: team.id, label: team.name })),
+                  },
+                ]}
+              />
+              {teams.isPending ? (
+                <span className="text-sm text-muted-foreground">Loading teams…</span>
+              ) : null}
+            </div>
+
+            <label className="flex flex-col gap-1.5 text-sm font-medium">
+              Site
+              <input
+                value={selectedTeam?.site ?? 'Auto-filled from team'}
+                readOnly
+                disabled
+                aria-readonly="true"
+                className="h-11 rounded-lg border border-input bg-muted px-3 text-base font-normal text-muted-foreground outline-none"
+              />
             </label>
 
             <label className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm">
@@ -220,7 +325,9 @@ export function RegisterPage() {
             <Button
               type="submit"
               className="h-11 w-full text-base"
-              disabled={!accepted || !turnstileToken || isSubmitting}
+              disabled={
+                !accepted || !turnstileToken || isSubmitting || !teamId || teamsUnavailable
+              }
             >
               {isSubmitting ? 'Getting your pass…' : 'Get my pass'}
             </Button>
