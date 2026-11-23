@@ -64,6 +64,7 @@ export function ScannerPage() {
   const act = useCallback(
     async (identifier: string, method: ClaimMethod) => {
       setPending(true)
+      setResult(null)
       setRpcError(null)
 
       try {
