@@ -26,7 +26,8 @@ const formSchema = z.object({
     .trim()
     .min(3, 'Enter your full name.')
     .max(80, 'Name is too long.')
-    .regex(/^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$/, "Use letters, spaces, . - ' only."),
+    .regex(/^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$/, "Use letters, spaces, . - ' only.")
+    .regex(/[A-Za-zÀ-ÖØ-öø-ÿ]/, 'Enter your full name.'),
   team_id: z
     .string()
     .min(1, 'Select your team.')
