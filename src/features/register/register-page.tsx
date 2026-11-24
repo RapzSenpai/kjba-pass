@@ -52,16 +52,25 @@ function storeToken(token: string) {
   }
 }
 
+// crypto.randomUUID is missing on older iOS; getRandomValues is universally supported.
+function newRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 // Reused across retries so a lost response returns the same pass instead of name_exists.
 function readRequestId(): string {
   try {
     const stored = localStorage.getItem(REQUEST_KEY)
     if (stored && UUID_PATTERN.test(stored)) return stored
-    const next = crypto.randomUUID()
+    const next = newRequestId()
     localStorage.setItem(REQUEST_KEY, next)
     return next
   } catch {
-    return crypto.randomUUID()
+    return newRequestId()
   }
 }
 

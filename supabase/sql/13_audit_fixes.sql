@@ -202,6 +202,7 @@ begin
 end;
 $$;
 
+revoke all on function public.register_guest_internal(text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.register_guest_internal(text, uuid, uuid) to service_role;
 
 -- F-09: log rejected claims at a disabled station ------------------------------
@@ -296,4 +297,5 @@ begin
 end;
 $$;
 
+revoke all on function public.dashboard_snapshot() from public, anon, authenticated;
 grant execute on function public.dashboard_snapshot() to authenticated;
