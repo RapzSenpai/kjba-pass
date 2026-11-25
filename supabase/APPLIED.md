@@ -17,6 +17,7 @@ Tick a row after you run that file in the Supabase SQL Editor.
 | `sql/11_staff_management.sql` | no | | Run after 10_seed.sql |
 | `sql/12_teams.sql` | no | | Run after 11_staff_management.sql |
 | `sql/13_audit_fixes.sql` | no | | Run after 12_teams.sql |
+| `sql/14_event_name.sql` | no | | Run after 13_audit_fixes.sql |
 | `sql/99_verify.sql` | no | | |
 | `templates/create_admin.sql` | no | | Not part of the run order |
 | `templates/add_staff.sql` | no | | Not part of the run order |

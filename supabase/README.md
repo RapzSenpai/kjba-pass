@@ -21,6 +21,7 @@ Run these once, in order:
 | `sql/11_staff_management.sql` | Revoke direct `update (active)` on staff |
 | `sql/12_teams.sql` | Teams, sites, registration team requirement, per-team stats |
 | `sql/13_audit_fixes.sql` | Idempotent registration, atomic winner, name/letter check, dashboard snapshot, audit gaps |
+| `sql/14_event_name.sql` | Rename the event to "Safelinx Christmas Party" |
 | `sql/99_verify.sql` | Read-only checks after the files above; every row must say PASS (the only allowed SKIP is `team_stats_sums` until an active admin exists) |
 
 Tick each row in `APPLIED.md` after running it.
@@ -113,4 +114,5 @@ Written in Phase 8.
 | `sql/11_staff_management.sql` | Revoke direct `update (active)` on staff |
 | `sql/12_teams.sql` | Teams, sites, registration team requirement, per-team stats |
 | `sql/13_audit_fixes.sql` | Idempotent registration, atomic winner, name/letter check, dashboard snapshot, audit gaps |
+| `sql/14_event_name.sql` | Rename the event to "Safelinx Christmas Party" |
 | `sql/99_verify.sql` | Read-only PASS/FAIL checks |

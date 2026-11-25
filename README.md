@@ -1,6 +1,6 @@
 # KJBA Pass
 
-High-performance, QR-based event registration, check-in, station claims, and raffle management platform. Built for the **Safelinks Christmas Party** by KJBA Production.
+High-performance, QR-based event registration, check-in, station claims, and raffle management platform. Built for the **Safelinx Christmas Party** by KJBA Production.
 
 ---
 
@@ -114,4 +114,4 @@ Refer to [docs/EVENT_DAY.md](docs/EVENT_DAY.md) for step-by-step procedures cove
 
 ## License
 
-Private and proprietary. Powered by KJBA Production for Safelinks Christmas Party 2026.
+Private and proprietary. Powered by KJBA Production for Safelinx Christmas Party 2026.

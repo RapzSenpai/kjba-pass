@@ -1,6 +1,6 @@
 create table public.settings (
   id int primary key default 1 check (id = 1),
-  event_name text not null default 'Safelinks Christmas Party',
+  event_name text not null default 'Safelinx Christmas Party',
   event_date date not null default '2026-12-19',
   venue text not null default 'Toledo Megadome Sports Center',
   timezone text not null default 'Asia/Manila',

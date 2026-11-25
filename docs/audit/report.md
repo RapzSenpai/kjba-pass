@@ -3,7 +3,7 @@
 **Audit date:** 2026-11-21  
 **Scope:** Pass A only (`[A]` and `[A+B]` checks; `[B]`-only checks are not run).  
 **Mode:** Read-only. No application code, SQL, or configuration was changed.  
-**Event:** Safelinks Christmas Party, Dec 19, 2026, Toledo Megadome Sports Center.
+**Event:** Safelinx Christmas Party, Dec 19, 2026, Toledo Megadome Sports Center.
 
 ## Fix pass — 2026-11-23
 

@@ -8,8 +8,8 @@ export function GuestLayout() {
       <header className="mx-auto flex w-full max-w-md items-center justify-center px-4 pt-8 pb-3">
         <img
           src={safelinksLogo}
-          alt="Safelinks"
-          className="h-16 sm:h-20 w-auto object-contain [filter:drop-shadow(0_4px_14px_rgba(0,0,0,0.14))_drop-shadow(0_1px_4px_rgba(0,0,0,0.08))]"
+          alt="Safelinx"
+          className="h-28 sm:h-32 w-auto object-contain [filter:drop-shadow(0_4px_14px_rgba(0,0,0,0.14))_drop-shadow(0_1px_4px_rgba(0,0,0,0.08))]"
         />
       </header>
       <main className="mx-auto w-full max-w-md flex-1 px-4 py-4">

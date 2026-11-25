@@ -1,6 +1,6 @@
 # KJBA Pass — Event-Day Runbook
 
-This runbook covers operational instructions for staff and administrators at the event (**Safelinks Christmas Party**, Dec 19, 2026, Toledo Megadome Sports Center, Timezone: `Asia/Manila`).
+This runbook covers operational instructions for staff and administrators at the event (**Safelinx Christmas Party**, Dec 19, 2026, Toledo Megadome Sports Center, Timezone: `Asia/Manila`).
 
 ---
 
