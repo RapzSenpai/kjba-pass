@@ -42,6 +42,13 @@ export function PassPage() {
     queryKey: ['pass', token],
     enabled: Boolean(token),
     refetchOnWindowFocus: true,
+    // Poll while the guest is waiting, stop once nothing else can change.
+    refetchInterval: (query) => {
+      if (document.visibilityState !== 'visible') return false
+      const data = query.state.data
+      if (data && (!data.ok || data.voided || (data.checked_in && data.cocktail_claimed && data.bundle_claimed))) return false
+      return 10000
+    },
     queryFn: () => guestRpc<GuestPass>('get_pass', { p_token: token ?? '' }),
   })
 
