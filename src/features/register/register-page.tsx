@@ -61,24 +61,87 @@ function newRequestId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-// Reused across retries so a lost response returns the same pass instead of name_exists.
-function readRequestId(): string {
+const MAX_PENDING_REQUESTS = 5
+const REQUEST_KEY_PREFIX = `${REQUEST_KEY}:`
+
+// The id is bound to the payload, so a retry of the same name and team replays the
+// original pass while a different payload (or another tab) gets its own id.
+function requestFingerprint(name: string, teamId: string): string {
+  const normalized = name.trim().replace(/\s+/g, ' ').toLowerCase()
+  return `${normalized}|${teamId}`
+}
+
+type StoredRequest = { id: string; at: number }
+
+// One entry per fingerprint, so two tabs registering different names cannot
+// overwrite each other. The map keeps the id when storage is blocked, so a retry in
+// this tab still replays instead of generating a new id.
+const pendingRequestIds = new Map<string, string>()
+
+function readStoredRequest(fingerprint: string): StoredRequest | null {
   try {
-    const stored = localStorage.getItem(REQUEST_KEY)
-    if (stored && UUID_PATTERN.test(stored)) return stored
-    const next = newRequestId()
-    localStorage.setItem(REQUEST_KEY, next)
-    return next
+    const raw = localStorage.getItem(REQUEST_KEY_PREFIX + fingerprint)
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const { id, at } = parsed as Partial<StoredRequest>
+    if (typeof id !== 'string' || !UUID_PATTERN.test(id) || typeof at !== 'number') return null
+    return { id, at }
   } catch {
-    return newRequestId()
+    return null
   }
 }
 
-function clearRequestId() {
+function writeStoredRequest(fingerprint: string, entry: StoredRequest) {
   try {
-    localStorage.removeItem(REQUEST_KEY)
+    localStorage.setItem(REQUEST_KEY_PREFIX + fingerprint, JSON.stringify(entry))
   } catch {
-    // Storage can be blocked; the next attempt just gets a new id.
+    // Storage can be blocked; the in-memory id still covers retries in this tab.
+  }
+}
+
+function pruneStoredRequests() {
+  try {
+    const entries: Array<{ key: string; at: number }> = []
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i)
+      if (!key?.startsWith(REQUEST_KEY_PREFIX)) continue
+      const stored = readStoredRequest(key.slice(REQUEST_KEY_PREFIX.length))
+      entries.push({ key, at: stored?.at ?? 0 })
+    }
+    entries.sort((a, b) => a.at - b.at)
+    const excess = entries.length - MAX_PENDING_REQUESTS
+    for (const entry of entries.slice(0, Math.max(0, excess))) {
+      localStorage.removeItem(entry.key)
+    }
+  } catch {
+    // Storage can be blocked; nothing to prune.
+  }
+}
+
+function requestIdFor(fingerprint: string): string {
+  const inMemory = pendingRequestIds.get(fingerprint)
+  if (inMemory) return inMemory
+
+  const stored = readStoredRequest(fingerprint)
+  if (stored) {
+    pendingRequestIds.set(fingerprint, stored.id)
+    return stored.id
+  }
+
+  const id = newRequestId()
+  pendingRequestIds.set(fingerprint, id)
+  writeStoredRequest(fingerprint, { id, at: Date.now() })
+  pruneStoredRequests()
+  return id
+}
+
+function clearRequestId(fingerprint: string) {
+  pendingRequestIds.delete(fingerprint)
+  try {
+    localStorage.removeItem(REQUEST_KEY_PREFIX + fingerprint)
+  } catch {
+    // Storage can be blocked; the in-memory entry is already gone.
   }
 }
 
@@ -104,7 +167,6 @@ export function RegisterPage() {
   })
   const navigate = useNavigate()
   const [storedToken] = useState(readStoredToken)
-  const [requestId] = useState(readRequestId)
   const [accepted, setAccepted] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileKey, setTurnstileKey] = useState(0)
@@ -159,11 +221,12 @@ export function RegisterPage() {
 
     setFormError(null)
 
+    const fingerprint = requestFingerprint(values.name, team.id)
     const body: RegisterRequest = {
       name: values.name,
       team_id: team.id,
       turnstileToken,
-      request_id: requestId,
+      request_id: requestIdFor(fingerprint),
     }
 
     let data: RegisterResult | null
@@ -186,7 +249,7 @@ export function RegisterPage() {
     }
 
     storeToken(data.token)
-    clearRequestId()
+    clearRequestId(fingerprint)
     navigate(`/g/${data.token}`)
   }
 

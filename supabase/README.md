@@ -21,9 +21,11 @@ Run these once, in order:
 | `sql/11_staff_management.sql` | Revoke direct `update (active)` on staff |
 | `sql/12_teams.sql` | Teams, sites, registration team requirement, per-team stats |
 | `sql/13_audit_fixes.sql` | Idempotent registration, atomic winner, name/letter check, dashboard snapshot, audit gaps |
-| `sql/99_verify.sql` | Read-only checks after the files above; every row must say PASS |
+| `sql/99_verify.sql` | Read-only checks after the files above; every row must say PASS (the only allowed SKIP is `team_stats_sums` until an active admin exists) |
 
 Tick each row in `APPLIED.md` after running it.
+
+**Before `13_audit_fixes.sql`:** run the read-only duplicate-active-winner check in its header. It must return zero rows. If it returns a row, the unique index fails and the whole file rolls back; resolve the duplicate manually first. The check never voids or deletes anything.
 
 `13_audit_fixes.sql` changes the registration and dashboard contracts. Apply it, redeploy `register-guest` and `manage-staff`, then deploy the frontend. Reversing that order breaks registration and the dashboard.
 

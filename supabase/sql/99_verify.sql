@@ -1,4 +1,7 @@
 -- Read-only checks. Run after 01..13. Every row should say PASS.
+-- The only allowed non-PASS row is SKIP for team_stats_sums while no active admin
+-- exists: create the admin, then re-run. A NOTICE about no active non-admin staff is
+-- also a skip, not a pass.
 -- (No table writes, no SET ROLE: an error would abort the whole script in the SQL Editor.)
 
 select 'rls_enabled' as check_name,
@@ -91,23 +94,80 @@ union all
 
 select 'guests_request_id_index',
   case when exists (
-    select 1 from pg_indexes
-    where schemaname = 'public'
-      and tablename = 'guests'
-      and indexname = 'guests_request_id_idx'
+    select 1
+    from pg_index i
+    where i.indexrelid = to_regclass('public.guests_request_id_idx')
+      and i.indrelid = to_regclass('public.guests')
+      and i.indisunique
+      and i.indisvalid
+      and i.indnkeyatts = 1
+      and pg_get_indexdef(i.indexrelid, 1, true) = 'request_id'
+      and i.indpred is not null
+      -- Exact predicate: parentheses, case, and whitespace normalized; any extra
+      -- condition makes this string differ and the check fail.
+      and regexp_replace(lower(pg_get_expr(i.indpred, i.indrelid)), '[()[:space:]]', '', 'g') = 'request_idisnotnull'
   ) then 'PASS' else 'FAIL' end,
-  'guests.request_id has a unique partial index'
+  'guests.request_id has a valid unique partial index on (request_id) where request_id is not null'
 
 union all
 
 select 'winners_one_active_index',
   case when exists (
-    select 1 from pg_indexes
-    where schemaname = 'public'
-      and tablename = 'winners'
-      and indexname = 'winners_one_active_idx'
+    select 1
+    from pg_index i
+    where i.indexrelid = to_regclass('public.winners_one_active_idx')
+      and i.indrelid = to_regclass('public.winners')
+      and i.indisunique
+      and i.indisvalid
+      and i.indnkeyatts = 1
+      and pg_get_indexdef(i.indexrelid, 1, true) = 'guest_id'
+      and i.indpred is not null
+      -- Exact predicate: parentheses, case, and whitespace normalized; any extra
+      -- condition makes this string differ and the check fail.
+      and regexp_replace(lower(pg_get_expr(i.indpred, i.indrelid)), '[()[:space:]]', '', 'g') = 'notvoided'
   ) then 'PASS' else 'FAIL' end,
-  'winners has one active win per guest index'
+  'winners has a valid unique partial index on (guest_id) where not voided'
+
+union all
+
+select 'anon_no_view_select',
+  case when not has_table_privilege('anon', 'public.raffle_pool', 'select')
+        and not has_table_privilege('anon', 'public.guest_overview', 'select')
+  then 'PASS' else 'FAIL' end,
+  'anon has no select grant on raffle_pool or guest_overview'
+
+union all
+
+select 'internal_helpers_not_executable',
+  case when not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('write_log', 'resolve_guest', 'generate_token',
+                        'generate_backup_code', 'normalize_name')
+      and (has_function_privilege('anon', p.oid, 'execute')
+           or has_function_privilege('authenticated', p.oid, 'execute'))
+  ) then 'PASS' else 'FAIL' end,
+  'anon and authenticated cannot execute write_log, resolve_guest, generate_token, generate_backup_code, normalize_name'
+
+union all
+
+select 'audit_rpc_grants',
+  case when has_function_privilege('authenticated', 'public.log_admin_action(text, jsonb)', 'execute')
+        and not has_function_privilege('anon', 'public.log_admin_action(text, jsonb)', 'execute')
+        and not has_function_privilege('anon', 'public.write_log(text, uuid, text, text, text, text, jsonb)', 'execute')
+        and not has_function_privilege('authenticated', 'public.write_log(text, uuid, text, text, text, text, jsonb)', 'execute')
+  then 'PASS' else 'FAIL' end,
+  'log_admin_action: authenticated only; write_log: nobody'
+
+union all
+
+select 'dashboard_snapshot_permissions',
+  case when has_function_privilege('authenticated', 'public.dashboard_snapshot()', 'execute')
+        and not has_function_privilege('anon', 'public.dashboard_snapshot()', 'execute')
+  then 'PASS' else 'FAIL' end,
+  'dashboard_snapshot: authenticated only'
 
 union all
 

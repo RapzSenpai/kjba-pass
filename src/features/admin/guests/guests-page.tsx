@@ -451,14 +451,19 @@ export function GuestsPage() {
     }
   }
 
-  const filteredExportLabel =
-    teamFilter === 'none'
+  const hasActiveFilters = Boolean(
+    teamFilter || siteFilter || query.trim() || status !== 'all' || cocktail !== 'all' || bundle !== 'all',
+  )
+
+  const filteredExportLabel = !hasActiveFilters
+    ? null
+    : teamFilter === 'none'
       ? 'Export filtered (CSV)'
       : teamFilter
         ? 'Export this team (CSV)'
         : siteFilter
           ? 'Export this site (CSV)'
-          : null
+          : 'Export filtered (CSV)'
 
   const copy = selected ? dialogCopy(selected.action, selected.guest.name) : null
 

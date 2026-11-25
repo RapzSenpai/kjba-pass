@@ -17,38 +17,44 @@ Code fixes applied after owner approval. Runtime and device checks remain manual
 | F-08 | Medium | Checked-in filter excludes voided guests. |
 | F-03 | Medium | `register-guest` rejects bodies over 4 KB before parsing. |
 | F-06 | Medium | Client request id + `guests.request_id` replay returns the original pass on retry. |
-| F-09 | Medium | Disabled-station claims are logged; client and Edge audit writes are checked. |
+| F-09 | Medium | **Partial.** Disabled-station claims are now logged, and settings/raffle/copy surface a warning when `log_admin_action` fails. A failed audit write still commits the mutation and is not durably retained: `manage-staff/index.ts:81-84` only logs the error, and no outbox/retry exists. |
 | F-13 | Medium | `dashboard_snapshot()` serves stats, teams, and recent activity in one call. |
 | F-11 | Medium | Routes, layouts, and guards are lazy; guest pages use plain fetch instead of supabase-js. Initial preload ~113 KB gzip, `/register` ~210 KB. |
 
-Not fixed: F-01, F-02, F-04, F-12, F-14, F-15 (Low). Staging, load, and device checks stay `CANNOT VERIFY` until the owner runs them.
+Not fixed: F-01, F-02, F-04, F-12, F-14, F-15 (Low) and the durable-retry half of F-09 (Medium).
+
+**Accepted risk (2026-11-24):** `manage-staff` does not serialize the `staff.active` update (`index.ts:297-301`) and the Auth ban/unban (`index.ts:308-312`), so two admin tabs acting on the same staff member at the same time can leave the two stores out of sync. The race is reachable, not prevented by the current UI guards. Sequence: tab A deactivates (writes `active = false`), tab B activates (writes `active = true`), B unbans, A bans. Final `staff.active = true` with the Auth user banned: the member looks active in the admin UI but cannot sign in. The reverse order leaves `staff.active = false` with the user unbanned: the UI says deactivated while Auth still issues a session, and every RPC then rejects them on the `active` check. The per-tab pending flag and the rollback's compare-and-set on `active` do not close this, because neither is visible to or serialized with another tab. Accepted for the event because it needs two admins (or one admin in two tabs) issuing opposite `set_active` calls for the same staff member within the same few seconds, and the outcome is a wrong active indicator or a login without access, not data loss or a privilege gain. No locking or architectural change was made. A real guard must serialize per target user across both writes; a Postgres advisory lock cannot, because each RPC arrives over PostgREST in its own session and the Auth call sits outside the database. If this risk is withdrawn, the options are an app-level per-user lock around both calls, or making `staff.active` the only switch and dropping the Auth ban sync. Regression note: `activity_logs` is append-only.
+
+Staging, load, and device checks stay `CANNOT VERIFY` until they are run. The owner tests the remaining section 5 journeys manually on production under rule 2a; UX-06 (raffle draw/void) and UX-07 (open/close registration and check-in) remain restricted to a staging or throwaway project.
 
 ## 1. Executive summary
 
-**Verdict: NO-GO today. Conditional go only after the two High findings are fixed and the unverified staging/security checks pass.**
+> **Historical snapshot.** Sections 1–4 record the original **2026-11-21** Pass A run. Statuses shown as `FAIL` there are the pre-fix results. The **2026-11-23** fix pass above supersedes them where listed; measurements were not re-run afterwards, so any figure or regression result here stays **unverified** until re-measured.
 
-No Blocker was proven statically. Two High findings are open:
+**Verdict at the 2026-11-21 cut-off: NO-GO.** Current standing after the fix pass: no Blocker and no High remains open; conditional go only if the runtime checks in section 7 pass.
 
-1. **UX-10** — a failed scanner RPC can leave the previous green success card on screen, a false success at the door.
-2. **DATA-33** — two concurrent `record_winner` calls can record the same guest twice; there is no unique/atomic winner guard.
+No Blocker was proven statically. The two High findings from this run were fixed on 2026-11-23 and have not been regression-tested:
 
-The largest uncertainty is **SEC-10 through SEC-13**: the staging URL/anon key were not present in the audit shell, so anon/staff access, station lock, and deactivated-staff behavior were not exercised. Static SQL looks correctly locked down, but that is not a substitute for the runtime tests.
+1. **UX-10** (F-10) — the scanner now clears the previous result before every RPC.
+2. **DATA-33** (F-07) — `record_winner` locks the guest, re-checks the pool, and a partial unique index enforces one active win.
 
-| Severity | Count |
-|---|---:|
-| Blocker | 0 proven |
-| High | 2 |
-| Medium | 7 |
-| Low | 6 |
-| Total findings | 15 |
+The largest uncertainty is still **SEC-10 through SEC-13**: the staging URL/anon key were not present in the audit shell, so anon/staff access, station lock, and deactivated-staff behavior were not exercised. Static SQL looks correctly locked down, but that is not a substitute for runtime tests, and those tests have not been run.
 
-**Top five event risks**
+| Severity | Original (2026-11-21) | Open after fix pass |
+|---|---:|---:|
+| Blocker | 0 proven | 0 |
+| High | 2 | 0 |
+| Medium | 7 | 1 (F-09, partial) |
+| Low | 6 | 6 |
+| Total findings | 15 | 7 open (8 fixed) |
 
-1. **Anon/staff access is unverified** (SEC-10–13). If any runtime grant differs from the SQL files, guest data or admin actions could be exposed.
-2. **False scanner success** (UX-10). A network/RPC error after a prior success can leave a green card visible.
-3. **Duplicate raffle winner** (DATA-33). Two admin sessions can both record the same guest.
-4. **Lost registration response** (DATA-06). The guest is inserted, but a retry returns `name_exists` and no pass; the help desk must recover them.
-5. **Slow guest load and polling** (PERF-01/PERF-13). Initial `/register` JS is ~270 KB gzip, above the ~220 KB target; three dashboard tabs create ~38,880 requests over six hours.
+**Top event risks now**
+
+1. **Anon/staff access is unverified** (SEC-10–13). If any runtime grant differs from the SQL files, guest data or admin actions could be exposed. Still the top risk because nothing was run.
+2. **Audit writes are not durable** (F-09). A failed `activity_logs` insert leaves the mutation committed with no retry path. Settings save, raffle lock, and copy raffle names show a warning (`settings-page.tsx:89`, `raffle-page.tsx:260,379`); the guests CSV export (`guests-page.tsx:433`) and `manage-staff` (`index.ts:81-84`) fail silently, so the trail is incomplete with no admin signal for those actions.
+3. **Runtime journeys are unrun** (DATA/UX). Concurrency, lost-response recovery, station lock, and device behavior are code-verified only. The owner tests these manually; results must be recorded against the checks.
+4. **Raffle journey is untested by design** (UX-06). No staging project exists, and raffle draw/void is not run on production, so it stays `CANNOT VERIFY` until a throwaway project is available.
+5. **Performance was measured before fixes and not since** (PERF-01/02/13). The 2026-11-23 build reported ~113 KB initial preload and ~210 KB on `/register`, but no Lighthouse or poll-count re-measurement has been recorded.
 
 ## 2. Results table
 
@@ -58,7 +64,7 @@ The largest uncertainty is **SEC-10 through SEC-13**: the staging URL/anon key w
 |---|---|---|---|
 | INV-01 | PASS | — | Routes, screens, tables, views, RPCs, Edge Functions, and SQL files inventoried. All planned routes exist. Phase 8 (staff management) and Phase 9 (teams) are built. One plan deviation: registration uses the shared `SelectField`, not the plan’s native `<select>` (F-02). |
 | INV-02 | CANNOT VERIFY | — | `supabase/APPLIED.md` says `no` for every SQL file. Applied state cannot be read from the repo; Appendix A must be run by the owner. |
-| INV-03 | PASS | — | SQL lives in numbered files `01`–`12` plus `99_verify.sql`; templates are explicitly outside the run order (`supabase/README.md`). No application code depends on an unsaved dashboard-only change found. |
+| INV-03 | PASS | — | SQL lives in numbered files `01`–`13` plus `99_verify.sql`; templates are explicitly outside the run order (`supabase/README.md`). No application code depends on an unsaved dashboard-only change found. |
 | INV-04 | FAIL | Low | `npm ci` failed with Windows `EPERM` unlinking `lightningcss.win32-x64-msvc.node` and `rolldown-binding.win32-x64-msvc.node`. `npm install --no-package-lock --no-audit --no-fund` restored `node_modules`; `npm run build`, `tsc --noEmit`, and `oxlint` then passed. |
 
 ### Security
@@ -78,7 +84,7 @@ The largest uncertainty is **SEC-10 through SEC-13**: the staging URL/anon key w
 | SEC-15 | PASS | — | `get_pass` returns the token holder’s own token/backup code (`06_functions_public.sql:73-94`); `register_guest_internal` returns a new pass to the service role only (`12_teams.sql:71-132`). `search_guests`, `guest_overview`, `raffle_pool`, `team_stats`, and logs return no token or backup code. |
 | SEC-16 | PASS | — | RLS is enabled on six base tables (`05_rls.sql:1-6`) and `teams` (`12_teams.sql:13`). Both views use `security_invoker = true` (`04_views.sql:4`, `:17`; `12_teams.sql:202`). Policies: settings admin select/update; staff self/admin select and admin update; guests/claims/winners/logs admin select; teams admin select. |
 | SEC-17 | CANNOT VERIFY | — | Static evidence: `02_tables.sql:81-93` defines the append-only trigger and raises `activity_logs is append-only`. Runtime update/delete attempts as service role/admin were not run; no staging service access. Logs reviewed contain no tokens, backup codes, or passwords. |
-| SEC-20 | FAIL | Medium | `register-guest/index.ts:51-53` parses JSON before applying any body-size limit. It validates name length and types, but a large body is parsed first. By contrast, `manage-staff/index.ts:6,60-62` has a 4 KB content-length guard. Non-POST, invalid types, and Turnstile ordering are otherwise correct. |
+| SEC-20 | FIXED (verify pending) | — | F-03: `register-guest` rejects bodies over 4 KB before parsing. Original result: JSON was parsed before any body-size limit. |
 | SEC-21 | CANNOT VERIFY | — | Static evidence: `register-guest/index.ts:8-21,36-40` and `manage-staff/index.ts` use exact `ALLOWED_ORIGIN` matching; no wildcard. Runtime origin matrix not run. |
 | SEC-22 | PASS | — | `src/lib/supabase.ts:5-11` creates the frontend client with the anon key. Service-role clients exist only inside `register-guest` and `manage-staff`. Console output in `register-guest/index.ts:105,109,130` contains only status/error codes, not bodies, tokens, or keys. |
 | SEC-23 | PASS | — | `manage-staff/index.ts` verifies an active admin (`:63-88`), hardcodes created role to `staff` (`:166-172`), rejects admin reset/deactivate targets (`:240-247`, `:284-291`), cleans up orphan Auth users (`:180-199`), and never logs passwords. |
@@ -87,7 +93,7 @@ The largest uncertainty is **SEC-10 through SEC-13**: the staging URL/anon key w
 | SEC-40 | PASS | — | `grep` found no `dangerouslySetInnerHTML`, `innerHTML`, `eval(`, `document.write`, or `new Function` in `src`. Guest names, reasons, prizes, and team names are rendered through JSX text nodes. |
 | SEC-41 | FAIL | Low | `src/lib/csv.ts:5` guards only `=`, `+`, `-`, and `@`. A Node check showed tab (`"\tcmd"`) and CR (`"\rcmd"`) are not guarded. No unit tests exist for `csv.ts`. Formula injection is constrained today because the name regex rejects control characters, but the export helper does not meet the stated rule. |
 | SEC-42 | PASS | — | `RequireRole` (`src/features/auth/require-role.tsx`) is client-side UX only; real access is enforced by RLS and RPC role checks. Admin pages query tables/views backed by admin-only policies. |
-| SEC-43 | PASS | — | `localStorage` use is limited to `kjba_pass_token` (`register-page.tsx:40,48`) and `kjba_scanner_tab` (`scanner-page.tsx:39,131`). Supabase session persistence is handled by `supabase-js`. The pass token is intentionally in `/g/:token`. |
+| SEC-43 | PASS | — | `localStorage` holds the pass token (`kjba_pass_token`), the scanner tab (`kjba_scanner_tab`), and registration retry ids under `kjba_reg_request_id:<name|team>` (random UUIDs, no personal data). Supabase session persistence is handled by `supabase-js`. The pass token is intentionally in `/g/:token`. |
 | SEC-44 | NOT RUN (Pass B) | — | B-only headers/robots/live-site check. `vercel.json` and `index.html` contain the intended static configuration. |
 | SEC-45 | PASS | — | `npm audit --omit=dev`: 0 high, 0 critical, 4 moderate (`@ts-morph/common`, `minimatch`, `shadcn`, `ts-morph`). `package-lock.json` is tracked. No `.map` files in `dist/`. Unused dependencies noted in F-14. |
 | SEC-46 | PASS | — | `get_pass` only returns one token’s pass; there is no list endpoint on the pass page. No analytics or third-party requests were found on `/g/:token`; the only external service call is Supabase. Turnstile loads only on registration. `vercel.json` sets `Referrer-Policy: strict-origin-when-cross-origin`, so the token path is not sent cross-origin. |
@@ -98,11 +104,11 @@ The largest uncertainty is **SEC-10 through SEC-13**: the staging URL/anon key w
 | ID | Status | Severity | Evidence |
 |---|---|---|---|
 | DATA-01 | CANNOT VERIFY | — | Static evidence: `12_teams.sql:102-115` normalizes and relies on unique `name_normalized`; `02_tables.sql:31` makes it unique. No staging duplicate-name test was run. |
-| DATA-02 | FAIL | Medium | The name regex in `register-page.tsx:29` and `12_teams.sql:92` accepts punctuation-only names. A Node check showed `"..."`, `"'''"`, and `".-"` pass the character class; only the length minimum blocks shorter ones. Digits, `<script>`, and SQL metacharacters are rejected; accents pass. |
+| DATA-02 | FIXED (verify pending) | — | F-05: Zod and SQL require at least one letter, so punctuation-only names are rejected. Original result: `"..."`, `"'''"`, and `".-"` passed the character class. |
 | DATA-03 | CANNOT VERIFY | — | Static evidence: Edge Function validates UUID (`register-guest/index.ts:61-69`); SQL requires an active team (`12_teams.sql:96-99`). No staging request with missing/random/inactive team was run. |
 | DATA-04 | CANNOT VERIFY | — | Static evidence: `12_teams.sql:76-80` checks `registration_open` and `registration_closes_at` server-side. No staging test. |
 | DATA-05 | CANNOT VERIFY | — | No staging project or load script. Static evidence: unique `name_normalized` plus retry loop (`12_teams.sql:104-121`); unique token/code with retry. Concurrency result not measured. |
-| DATA-06 | FAIL | Medium | Registration has no idempotency key. `register-page.tsx:132-168` sends the request and relies on the response; if the response is lost, a retry reaches `12_teams.sql:112-115` and returns `name_exists` with no pass. The guest must go to the help desk. |
+| DATA-06 | FIXED (verify pending) | — | F-06: client request id bound to name+team, `guests.request_id` unique partial index, and `register_guest_internal` replays the original pass (`13_audit_fixes.sql:109-203`). Lost-response retry still needs a runtime check. |
 | DATA-10 | CANNOT VERIFY | — | Static evidence: atomic update with `checked_in_at is null` (`07_functions_staff.sql:43-50`); voided/locked/closed paths return distinct codes. No staging runs. |
 | DATA-11 | CANNOT VERIFY | — | Static evidence: `p_method` falls back to `scan` (`07_functions_staff.sql:6`, `:67`) and is written to logs. No runtime method test. |
 | DATA-12 | CANNOT VERIFY | — | No staging concurrency test. Static evidence: conditional update and row-count check (`07_functions_staff.sql:43-50`). |
@@ -112,21 +118,21 @@ The largest uncertainty is **SEC-10 through SEC-13**: the staging URL/anon key w
 | DATA-30 | CANNOT VERIFY | — | Static evidence: void/restore RPCs require a reason where applicable and log success (`08_functions_admin.sql:1-45`). No staging test. |
 | DATA-31 | CANNOT VERIFY | — | Static evidence: `undo_check_in` blocks claims and active wins (`08_functions_admin.sql:56-69`); `undo_claim` deletes the claim. No staging test. |
 | DATA-32 | CANNOT VERIFY | — | Static view rule is correct (`04_views.sql:4-15`). Pool count was not cross-checked against raw rows on staging. |
-| DATA-33 | FAIL | High | `08_functions_admin.sql:124-132` checks the pool with `exists` and then inserts, with no unique constraint on `winners.guest_id` (`02_tables.sql:56-67`). Two concurrent admin calls can both pass the check and insert two active wins. |
+| DATA-33 | FIXED (verify pending) | — | F-07: `record_winner` takes a row lock, re-checks the pool, and inserts with a partial unique index `winners_one_active_idx` (`13_audit_fixes.sql:8-42`). Concurrency regression not yet run. |
 | DATA-34 | CANNOT VERIFY | — | Static evidence: `raffle_locked` is checked before check-in success (`07_functions_staff.sql:31-38`) and blocks admin too. No staging test. |
 | DATA-35 | CANNOT VERIFY | — | Static evidence: `copyNames` fetches `raffle_pool` and joins names with `\n` (`raffle-page.tsx:221-236`). No clipboard test on staging/device. |
 | DATA-40 | CANNOT VERIFY | — | Raw SQL counts were not run on staging. Static `dashboard_stats` definitions are visible in `08_functions_admin.sql:171-195`. |
 | DATA-41 | CANNOT VERIFY | — | No staging 23-team dataset/count comparison. Static `team_stats` includes all teams plus Unassigned (`12_teams.sql:224-270`). |
-| DATA-42 | FAIL | Medium | `guests-page.tsx:282` filters `checked_in` with only `checked_in_at is not null`; it does not exclude `voided`. A checked-in-then-voided guest appears under “Checked in” while the badge says “Voided”. |
-| DATA-50 | FAIL | Medium | Audit gaps found: `claim_station` returns `station_disabled` without `write_log` (`07_functions_staff.sql:81-84`); settings and raffle log calls are fire-and-forget (`settings-page.tsx:78`, `raffle-page.tsx:256,374`); `manage-staff` ignores audit insert errors (`manage-staff/index.ts:93,201,240,253,284,327`). |
+| DATA-42 | FIXED (verify pending) | — | F-08: the `checked_in` filter now also excludes `voided` guests. Original result: checked-in-then-voided guests appeared under “Checked in”. |
+| DATA-50 | PARTIAL | Medium | F-09: disabled-station claims are logged (`13_audit_fixes.sql:209-231`), and settings/raffle/copy now warn when the log write fails. **Still open:** the mutation is never rolled back and the audit entry is not retained for retry; `manage-staff` logs the error and drops it. |
 | DATA-51 | CANNOT VERIFY | — | Timezone formatting is Manila-based (`src/lib/format.ts:1-41`) and settings converts to/from `+08:00` (`settings-page.tsx:10-18`). No browser/OS UTC/New York test was run. |
 
 ### Performance
 
 | ID | Status | Severity | Evidence |
 |---|---|---|---|
-| PERF-01 | FAIL | Medium | Initial `/register` JS from `dist/index.html` preloads: `index` 182,284 B gzip + `supabase` 73,981 + `format` 9,168 + `stateAttributesMapping` 4,389 + `chevron-down` 182 + runtime 397 = **270,401 B gzip**; CSS adds 12,235 B. Target is about 220 KB. LCP not measured. |
-| PERF-02 | FAIL | Medium | The pass route uses the same initial `index.html` payload (270,401 B JS gzip); it exceeds the same ~220 KB JS target. LCP/score not measured. |
+| PERF-01 | FIXED (not re-measured) | — | F-11 reported ~210 KB gzip for `/register` and ~113 KB initial preload after the fix pass; that figure is unverified and no Lighthouse/LCP run is recorded. Original: 270,401 B JS gzip. |
+| PERF-02 | FIXED (not re-measured) | — | F-11: same reduced initial payload as `/register`; no post-fix Lighthouse run. Original: shared 270,401 B JS gzip. |
 | PERF-03 | CANNOT VERIFY | — | Route chunks measured: scanner 9,617 B gzip, guests 18,644, dashboard 3,844, staff 5,321, raffle 5,616, logs 2,400, settings 1,809, login 1,184. No Lighthouse/LCP because no staging/live URL. |
 | PERF-04 | PASS | — | `routes.tsx` lazy-loads login, scanner, and every admin page. `qr-scanner` is isolated to `scanner-page`/`scan-panel`; Turnstile is imported by the registration page only. `qr-scanner-worker` is a separate 10,381 B gzip chunk. No bundle visualizer installed; build output used instead. |
 | PERF-05 | FAIL | Low | `src/index.css:4` imports the default Inter variable package; `dist` contains Latin, Latin-ext, Cyrillic-ext, Cyrillic, Greek, Greek-ext, and Vietnamese WOFF2 files. Guest layout uses `safelinksLogo` 114,186 B and `logoKjba` 66,527 B, both larger than “a few KB”. |
@@ -134,7 +140,7 @@ The largest uncertainty is **SEC-10 through SEC-13**: the staging URL/anon key w
 | PERF-10 | CANNOT VERIFY | — | No staging project, no 5,000-row generator run, no `EXPLAIN (ANALYZE, BUFFERS)`. |
 | PERF-11 | PASS | — | Indexes exist for `guests.checked_in_at`, `guests.created_at`, `claims(guest_id, station)` unique, `winners.guest_id`, and `teams(site, sort_order)`; `guests.team_id` is added in `12_teams.sql:21`. Usage/unused-index evidence not available without EXPLAIN. |
 | PERF-12 | PASS | — | No per-row fetch loops found in dashboard, guests, raffle, or logs; each page uses one or a small fixed number of queries. Dashboard has 2 stats RPCs + 1 activity query per poll. |
-| PERF-13 | FAIL | Medium | Dashboard polls 3 requests every 5 s while visible (`dashboard-page.tsx:247-260,263-275`). 6 h = 4,320 cycles; 3 tabs × 4,320 × 3 = **38,880 requests**. The two stats RPCs are not combined. |
+| PERF-13 | FIXED (verify pending) | — | F-13: `dashboard_snapshot()` returns stats, teams, and recent activity in one call (`13_audit_fixes.sql:277-300`); the page now polls one request. Original: 38,880 requests over six hours with three tabs. |
 | PERF-20 | CANNOT VERIFY | — | No staging/load tool provided. |
 | PERF-21 | CANNOT VERIFY | — | No staging, test Turnstile secret, or registration load script. |
 | PERF-22 | CANNOT VERIFY | — | No staging staff JWTs or k6 setup. |
@@ -155,7 +161,7 @@ The largest uncertainty is **SEC-10 through SEC-13**: the staging URL/anon key w
 | UX-05 | CANNOT VERIFY | — | No camera-denied device test. |
 | UX-06 | CANNOT VERIFY | — | No raffle journey test. |
 | UX-07 | CANNOT VERIFY | — | No admin day-of run. |
-| UX-10 | FAIL | High | `scanner-page.tsx:66-90` clears `rpcError` but not `result` on RPC error. A previous green result (`result.ok`) remains rendered by `ResultCard` (`result-card.tsx:35`). On code/find tabs the previous result is not auto-cleared, so it can remain until dismissal/tab change. |
+| UX-10 | FIXED (verify pending) | — | F-10: the scanner clears the previous result before every RPC, so a failed request cannot leave a green card. Original result: a prior success stayed visible while the error banner showed. |
 | UX-11 | PASS | — | Scanner pauses 2.5 s after a scan and ignores the same value for 3 s (`scanner-page.tsx:103-115`); submit buttons use `pending`/`isSubmitting` guards. Runtime device behavior not tested. |
 | UX-12 | CANNOT VERIFY | — | No 8-hour/short-JWT staging test. |
 | UX-13 | CANNOT VERIFY | — | No throttled/offline test. Static error text exists on register and scanner. |
@@ -380,6 +386,9 @@ All OPS checks are `NOT RUN (Pass B)` because there is no live URL, hosting dash
 
 ## 5. Not verified
 
+The exact read-only procedure for SEC-10 to SEC-13 on an existing database is
+`audit.md` Appendix F. It calls no mutating RPC and is safe on production.
+
 ### Missing staging inputs
 
 `STAGING_SUPABASE_URL` and `STAGING_ANON_KEY` were **not present** in the audit shell (checked by length only; no values printed). No production writes or load tests were run.
@@ -407,16 +416,15 @@ Real phone camera scanning, printed QR poster, venue network, battery/power, ful
 
 ## 6. Recommended fix order
 
-1. **F-10 / UX-10** — clear stale scanner results before every request; add a network-error test. This is the safest event-day fix.
-2. **F-07 / DATA-33** — make winner recording atomic; add a uniqueness/serialization test on staging.
-3. **Run SEC-10–13 on staging** — anon table/RPC denial, staff JWT restrictions, station lock, deactivated staff. Fix any mismatch before load testing.
-4. **F-06 / DATA-06** — add request-id idempotency and a lost-response test.
-5. **F-03 / SEC-20** — add the Edge Function body-size guard.
-6. **F-05 / DATA-02** — require a letter in names in both Zod and SQL.
-7. **F-08 / DATA-42** — exclude voided guests from the checked-in filter or relabel it.
-8. **F-09 / DATA-50** — close audit gaps and await/check audit writes.
-9. **F-11/F-12/F-13** — reduce guest JS/fonts/images and combine dashboard polling.
-10. **F-01/F-02/F-04/F-14/F-15** — low-priority cleanup; F-02 needs a plan decision, not a blind code change.
+**Completed in the 2026-11-23 fix pass:** F-10, F-07, F-06, F-03, F-05, F-08, F-13 and F-11 (code changes only). F-09 was partially fixed.
+
+Remaining order:
+
+1. **Run SEC-10–13** — anon table/RPC denial with signature-correct arguments, staff JWT restrictions, station lock, deactivated staff. Any mismatch is a Blocker or High and outranks everything else.
+2. **F-09 / DATA-50 (remaining half)** — either retain failed audit writes for retry (outbox) or deliberately accept and document that a mutation can succeed without a log row.
+3. **Re-measure F-11/F-13** — confirm `/register` JS and the one-request dashboard poll, and run Lighthouse on the real target.
+4. **Run the section 7 regression checklist** — every fixed finding still needs its regression evidence.
+5. **F-12 / PERF-05, F-01, F-02, F-04, F-14, F-15** — Low cleanup; F-02 still needs a plan decision, not a blind code change.
 
 ## 7. Regression checklist
 
@@ -518,4 +526,4 @@ from public.guests;
 
 No load test, 5,000-row insert, or concurrency script was run. The test guest generator and cleanup must be run only on staging, with `ZZ Test` names. Appendix D k6 scenarios and Appendix E real-device checks remain pending.
 
-**Stop here.** No fixes were applied. Waiting for the owner to approve findings and provide the missing staging inputs / Appendix A results.
+**Status:** this Pass A run stopped here with no fixes applied. The 2026-11-23 fix pass then applied F-03, F-05–F-08, F-10, F-11, and F-13, and part of F-09. The section 7 regression checklist and the runtime checks above remain unrun; they are the remaining gate. The owner runs the section 5 journeys manually under `audit.md` rule 2a, and both UX-06 and UX-07 stay off production.

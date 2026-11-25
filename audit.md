@@ -9,15 +9,44 @@ Reference docs: `plan.md` (Phases 0 to 7, plus Phase 8 staff management and Phas
 ## 0. Rules for the auditor (read first)
 
 1. **Audit mode is read-only.** Do not change app code, SQL files, or config during the audit. Write findings only. Fixes happen in a separate pass after the owner approves them (section 9).
-2. **Never touch the production database with writes or load.** Run data-changing tests and load tests only against a **staging Supabase project** (a second free project, for example `kjba-pass-staging`, with the same SQL files applied and its own Edge Functions and secrets). If no staging project exists, stop and ask the owner to create one. Read-only queries on production are fine.
-3. **Never run** the "clear test guests" snippet from Phase 9 or any `delete` on guests, claims, winners, or logs outside staging.
+2. **Production is read-only for the auditor.** Do not write to or load-test the production database. Read-only queries on production are fine. Run data-changing tests and load tests against a **staging Supabase project** (a second free project, for example `kjba-pass-staging`, with the same SQL files applied and its own Edge Functions and secrets). If no staging project exists, say so in the report and leave those checks `CANNOT VERIFY`; never substitute production writes. The owner may run the Pass B journeys manually under the bounded exception below.
+
+   **2a. Bounded production testing (owner only, not the auditor).** The owner may exercise the section 5 journeys on production, **except UX-06 and UX-07, which are staging-only**, and only within this scope:
+   - At most five registrations, each named `ZZ Test ...`, plus one check-in and one claim on one of those guests. No load tests, no bulk inserts, no scripted loops or repeated runs.
+   - Never test with a real guest: do not check in, claim, void, restore, or undo a real guest to see what happens.
+   - No raffle testing on production. Recording or voiding a winner leaves an append-only `activity_logs` row and cannot be fully undone; UX-06 stays on staging/a throwaway project and is marked `CANNOT VERIFY` until one exists.
+   - `activity_logs` is append-only, so cleanup cannot remove the log rows the test created. Record every row created (IDs, names, timestamps).
+   - Cleanup after the pass uses only the IDs recorded when each test guest was created. Never delete by name pattern, and never delete from `activity_logs` (append-only):
+     ```sql
+     begin;
+     -- Pin the IDs recorded during this pass. No other row is touched.
+     create temp table zz_targets (id uuid primary key);
+     insert into zz_targets (id) values
+       ('<recorded guest id>'),
+       ('<recorded guest id>');
+
+     -- Sanity check: must return zero rows before deleting.
+     select g.id, g.name
+     from public.guests g
+     join zz_targets t on t.id = g.id
+     where g.name not like 'ZZ Test %';
+
+     delete from public.winners where guest_id in (select id from zz_targets);
+     delete from public.claims  where guest_id in (select id from zz_targets);
+     delete from public.guests  where id in (select id from zz_targets);
+     select count(*) as remaining from public.guests where id in (select id from zz_targets);
+     commit;
+     ```
+     Dependent rows are removed first (winners, then claims, then guests) and the final count must be `0`.
+   - The auditor must not execute these statements.
+3. **Never run** the "clear test guests" snippet from Phase 9. Outside staging, the only permitted deletes are the rule 2a cleanup of the guest IDs recorded during that pass. Never delete from `activity_logs`, never delete a guest that is not in the recorded ID set, and stop if the rule 2a guard query returns a row.
 4. **No real personal data.** Use dummy names prefixed `ZZ Test`.
 5. **Secrets:** never print, log, or commit keys. Read keys from environment variables (`SUPABASE_URL`, `ANON_KEY`, and so on). If you find a secret in the repo or the build output, report its location but not its value.
 6. **Evidence is mandatory.** Every PASS needs proof (file path and line, a query result, or command output). Every FAIL needs the evidence and the impact. If you cannot verify something, mark it `CANNOT VERIFY` and say why. Never write "looks fine" without evidence.
 7. **Skip what is not built.** If a feature from `plan.md` is not in the repo (for example Phase 8), mark its checks `N/A` and list it in the inventory. If something is built that the plan does not mention, list it.
 8. **Two passes.**
    - **[A] Pre-deploy:** static review, SQL review, local build, staging tests.
-   - **[B] Post-deploy:** run against the live URL and the production Supabase project (read-only plus a few clearly prefixed test registrations that the owner agrees to).
+   - **[B] Post-deploy:** run against the live URL and the production Supabase project. Read-only for the auditor; the owner may perform the section 5 journeys under rule 2a.
    Each check below is tagged `[A]`, `[B]`, or `[A+B]`.
 9. **Status values:** `PASS`, `FAIL`, `N/A`, `CANNOT VERIFY`.
 10. **Severity:**
@@ -48,8 +77,8 @@ Reference docs: `plan.md` (Phases 0 to 7, plus Phase 8 staff management and Phas
 - **SEC-05** `[B]` Supabase Auth: public sign-ups are disabled. No leftover test users, test staff, or default accounts in Authentication > Users. Admin password is strong.
 
 ### Database access control (use Appendix A queries and Appendix B curl tests)
-- **SEC-10** `[A+B]` **Anon role:** with only the anon key, `select` on `guests`, `staff`, `settings`, `claims`, `winners`, `activity_logs`, `teams`, `raffle_pool`, `guest_overview` must all fail or return no rows. **Any row returned is a Blocker.**
-- **SEC-11** `[A+B]` **Anon RPCs:** only `get_public_settings`, `get_pass`, and `get_teams` may be executable by anon. Every other function must be denied.
+- **SEC-10** `[A+B]` **Anon role:** with only the anon key, `select` on `guests`, `staff`, `settings`, `claims`, `winners`, `activity_logs`, `teams`, `raffle_pool`, `guest_overview` must all fail or return no rows. An empty result on its own is not proof: confirm the effective privileges with `has_table_privilege('anon', …)` for every listed table (it includes privileges inherited through `PUBLIC`, which `information_schema.role_table_grants` does not show) and `has_column_privilege` for `guests.token` and `guests.backup_code` (Appendix A), plus `99_verify.sql` for the base tables; list `role_table_grants` for context only, never as proof. Confirm no policy grants `anon`, then repeat the requests against rows you know exist (the `ZZ Test` rows under rule 2a, or dummy rows on staging) and check they are not returned. **Any row returned is a Blocker.**
+- **SEC-11** `[A+B]` **Anon RPCs:** only `get_public_settings`, `get_pass`, and `get_teams` may be executable by anon. Every other function must be denied. Call each function with arguments matching its real signature (Appendix B) and read the error. Exception: do not call `log_admin_action` or `write_log` on production — both insert a row if the grant is wrong and `activity_logs` is append-only. Prove those two with the Appendix A `has_function_privilege` query and invoke them only on staging. An authorization error (HTTP 401/403, SQLSTATE `42501`) means the grant is missing as intended, while `function not found` (HTTP 404, `PGRST202`) means the signature did not match and the privilege check never ran. If a `SECURITY DEFINER` re-checks the role itself (most staff/admin functions do), also call it on staging with a staff JWT and expect `not_authorized`.
 - **SEC-12** `[A+B]` **Staff role** (a non-admin staff login on staging): cannot read admin tables or views, cannot call admin RPCs, cannot read `guests.token` or `guests.backup_code` by any route (direct select, view, RPC).
 - **SEC-13** `[A+B]` **Station lock:** a staff user assigned to `cocktail` calling `check_in_guest` or `claim_station` for `bundle` gets `not_authorized`. A deactivated staff user fails every RPC even with a valid session. Admin can act at all stations.
 - **SEC-14** `[A]` Review every `SECURITY DEFINER` function: has `set search_path`, checks the caller's role at the top, uses no dynamic SQL built from input, and has the minimum `EXECUTE` grants. Internal helpers (`resolve_guest`, `write_log`, `generate_token`, `generate_backup_code`, `normalize_name`) must not be executable by anon or authenticated.
@@ -91,7 +120,7 @@ Run these on **staging**. For concurrency tests use a small script (Node, k6, or
 - **DATA-03** Team: missing, `null`, random UUID, an inactive team: all rejected with `invalid_team`. A forged `site` field is ignored. (Phase 9, else `N/A`.)
 - **DATA-04** Registration closed (toggle off, and `registration_closes_at` in the past) is enforced server-side, not only in the UI. Test directly against the Edge Function.
 - **DATA-05** **Concurrency:** 20 parallel registrations with the same name result in exactly 1 success and 19 `name_exists`. 100 parallel registrations with different names all succeed with unique tokens and backup codes. No 500 errors.
-- **DATA-06** **Lost response:** simulate a successful registration whose response never reaches the phone (kill the network after the request is sent). The guest retries and gets `name_exists` with no pass. Document exactly what the guest sees. This is a likely real-world failure at a crowded venue. Rate it, and propose a fix (for example a client-generated request id stored in `localStorage`, with the server returning the existing pass for the same id).
+- **DATA-06** **Lost response:** simulate a successful registration whose response never reaches the phone (kill the network after the request is sent). Retry the same name and team: the client reuses its stored `request_id` (`localStorage` entries prefixed `kjba_reg_request_id:`, one per name+team) and `register_guest_internal` returns the original pass with `replay: true`. Verify the returned token and backup code match the first registration, that `guests` still holds exactly one row, and that no second guest is created. Then send the same `request_id` with a different name and confirm it never returns the first guest's pass. Record the observed outcome (screenshot/text of what the guest sees) rather than assuming `name_exists`.
 
 ### Check-in
 - **DATA-10** First scan succeeds. Second returns `already_checked_in` with the time. Voided guest rejected. Not found rejected. `checkin_open = false` or past `checkin_closes_at` blocks staff but not admin. `raffle_locked` blocks everyone.
@@ -156,14 +185,14 @@ Record **measured numbers** with the tool and device profile used. Do not guess.
 
 ## 5. Seamlessness and event-day behavior `[A+B]`
 
-### End-to-end journeys (run on staging, repeat on live with test data in Pass B)
+### End-to-end journeys (run on staging; on production only the owner, only under rule 2a, and never UX-06 or UX-07)
 - **UX-01** Guest: scan the QR poster URL, register, screenshot the pass, close the browser, reopen the site (banner "You already registered on this device").
 - **UX-02** Entrance: scan the pass, see the green check-in. Scan again, see red "already" with the time.
 - **UX-03** Booth: cocktail scan before check-in gives amber "send to entrance". After check-in gives green. Repeat gives red "already claimed". Same for Bundle of Joy.
 - **UX-04** Lost QR: staff uses Find Guest, confirms, check-in works. Repeat search shows the right status.
 - **UX-05** Camera dead: staff switches to Enter Code, then to Find Guest, without reloading.
-- **UX-06** Raffle: admin copies the pool, records a winner, voids an absent winner, copies the pool again, the list updates correctly.
-- **UX-07** Admin day-of: open registration and check-in, watch the dashboard update within 5 seconds, close both, export the CSV.
+- **UX-06** Raffle: admin copies the pool, records a winner, voids an absent winner, copies the pool again, the list updates correctly. **Staging or throwaway project only — do not run this on production** (the append-only log and the winner row cannot be cleanly reversed); mark it `CANNOT VERIFY` when no such project exists.
+- **UX-07** Admin day-of: open registration and check-in, watch the dashboard update within 5 seconds, close both, export the CSV. **Staging or throwaway project only** — it writes live `registration_open` and `checkin_open` settings. Never run it on production; mark it `CANNOT VERIFY` when no such project exists. Production evidence for those two settings is limited to reading their current values.
 
 ### Failure handling
 - **UX-10** **No false success:** with the network off or an RPC error, the scanner must never show green. Unknown response codes must map to a neutral or red state, never green. Review the code that maps result codes to colors.
@@ -234,7 +263,7 @@ Then **stop** and wait for the owner.
 - SEC-10 to SEC-13 pass on production.
 - DATA-05, DATA-12, DATA-21 pass (no double claims or duplicate registrations under concurrency).
 - PERF-20 to PERF-22 meet their targets on staging with at least 20% headroom, or the owner has accepted the risk in writing.
-- UX-01 to UX-07 pass on real phones (one iPhone and one low-end Android at minimum).
+- UX-01 to UX-05 pass on real phones (one iPhone and one low-end Android at minimum). UX-06 and UX-07 pass on staging or a throwaway project and stay `CANNOT VERIFY` until one exists; they are never run on production.
 - A staff dry run was completed, and `docs/EVENT_DAY.md` was walked end to end.
 
 ---
@@ -251,17 +280,26 @@ join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relkind = 'r'
 order by 1;
 
--- Table privileges for the API roles (anything for anon should be intentional)
+-- Effective table privileges. has_table_privilege includes grants inherited
+-- through PUBLIC, which information_schema.role_table_grants does not show.
+-- Every anon column must be false.
+select t as table_name,
+       has_table_privilege('anon', format('public.%I', t), 'select') as anon_select,
+       has_table_privilege('authenticated', format('public.%I', t), 'select') as authenticated_select
+from unnest(array['guests','staff','settings','claims','winners','activity_logs','teams','raffle_pool','guest_overview']) as t
+order by 1;
+
+-- Column-level check on guests: token and backup_code must be false for both roles.
+select c as column_name,
+       has_column_privilege('anon', 'public.guests', c, 'select') as anon_select,
+       has_column_privilege('authenticated', 'public.guests', c, 'select') as authenticated_select
+from unnest(array['token','backup_code']) as c;
+
+-- Explicit grants, for context only. Not proof of effective access.
 select grantee, table_name, privilege_type
 from information_schema.role_table_grants
 where table_schema = 'public' and grantee in ('anon', 'authenticated')
 order by grantee, table_name, privilege_type;
-
--- Column privileges on guests (token and backup_code must NOT appear for authenticated or anon)
-select grantee, column_name, privilege_type
-from information_schema.column_privileges
-where table_schema = 'public' and table_name = 'guests' and grantee in ('anon', 'authenticated')
-order by grantee, column_name;
 
 -- Function execute rights. Expect anon = true only for get_public_settings, get_pass, get_teams.
 select p.proname,
@@ -311,7 +349,9 @@ select
 from public.guests;
 ```
 
-**Staging only — dummy guest generator (5,000 rows):**
+**Staging only — dummy guest generator (5,000 rows).** Use the block that matches the project's migration state.
+
+Phase 9 applied (the `teams` table exists):
 
 ```sql
 with t as (select array_agg(id order by sort_order) as ids from public.teams)
@@ -322,14 +362,26 @@ select 'ZZ Test ' || g,
        upper(lpad(to_hex(g), 6, '0')),
        t.ids[1 + (g % array_length(t.ids, 1))]
 from generate_series(1, 5000) as g, t;
+```
 
--- Staging cleanup
+Phase 9 not applied (no `teams` table — do not run the block above, and do not reference `public.teams` anywhere in this path):
+
+```sql
+insert into public.guests (name, name_normalized, token, backup_code)
+select 'ZZ Test ' || g,
+       lower('zz test ' || g),
+       encode(extensions.gen_random_bytes(10), 'hex'),
+       upper(lpad(to_hex(g), 6, '0'))
+from generate_series(1, 5000) as g;
+```
+
+Staging cleanup (works for either block):
+
+```sql
 delete from public.claims  where guest_id in (select id from public.guests where name like 'ZZ Test %');
 delete from public.winners where guest_id in (select id from public.guests where name like 'ZZ Test %');
 delete from public.guests  where name like 'ZZ Test %';
 ```
-
-If the project has no `teams` table yet (Phase 9 not applied), drop the `team_id` column from the insert.
 
 ## Appendix B — Access tests with curl (set `SUPABASE_URL` and `ANON_KEY` in your shell)
 
@@ -342,23 +394,45 @@ for t in guests staff settings claims winners activity_logs teams raffle_pool gu
   echo
 done
 
-# Anon must be denied on every non-public RPC (expect permission denied or function not found).
-for f in dashboard_stats team_stats search_guests check_in_guest claim_station void_guest \
-         restore_guest undo_check_in undo_claim record_winner void_winner log_admin_action \
-         register_guest_internal resolve_guest write_log; do
-  echo "== $f"
-  curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/$f" \
+# Anon must be denied on every non-public RPC. Each call uses arguments that match
+# the function's real signature: a mismatched signature returns 404 "function not
+# found" (PGRST202) and proves nothing. Expect an authorization error (401/403,
+# SQLSTATE 42501). A 200, or any function body result, is a Blocker.
+run_rpc () {
+  echo "== $1"
+  curl -s -w "\nHTTP %{http_code}\n" -X POST "$SUPABASE_URL/rest/v1/rpc/$1" \
     -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" \
-    -H "Content-Type: application/json" -d '{}'
-  echo
-done
+    -H "Content-Type: application/json" -d "$2"
+}
 
-# Allowed anon RPCs (expect 200)
-for f in get_public_settings get_teams; do
-  curl -s -o /dev/null -w "$f %{http_code}\n" -X POST "$SUPABASE_URL/rest/v1/rpc/$f" \
-    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" \
-    -H "Content-Type: application/json" -d '{}'
-done
+ZERO_UUID='00000000-0000-0000-0000-000000000000'
+run_rpc dashboard_stats '{}'
+run_rpc team_stats '{}'
+run_rpc dashboard_snapshot '{}'
+run_rpc search_guests "{\"p_query\":\"ZZ Test\"}"
+run_rpc check_in_guest "{\"p_identifier\":\"$ZERO_UUID\",\"p_method\":\"scan\"}"
+run_rpc claim_station "{\"p_identifier\":\"$ZERO_UUID\",\"p_station\":\"cocktail\",\"p_method\":\"scan\"}"
+run_rpc void_guest "{\"p_guest_id\":\"$ZERO_UUID\",\"p_reason\":\"ZZ Test\"}"
+run_rpc restore_guest "{\"p_guest_id\":\"$ZERO_UUID\"}"
+run_rpc undo_check_in "{\"p_guest_id\":\"$ZERO_UUID\",\"p_reason\":\"ZZ Test\"}"
+run_rpc undo_claim "{\"p_guest_id\":\"$ZERO_UUID\",\"p_station\":\"cocktail\",\"p_reason\":\"ZZ Test\"}"
+run_rpc record_winner "{\"p_guest_id\":\"$ZERO_UUID\",\"p_prize\":\"ZZ Test\"}"
+run_rpc void_winner "{\"p_winner_id\":\"$ZERO_UUID\",\"p_reason\":\"ZZ Test\",\"p_return_to_pool\":false}"
+run_rpc register_guest_internal "{\"p_name\":\"ZZ Test Anon\",\"p_team_id\":\"$ZERO_UUID\",\"p_request_id\":null}"
+run_rpc resolve_guest '{"p_identifier":"ZZ Test"}'
+
+# log_admin_action and write_log are deliberately not called above. Both insert an
+# activity_logs row if the grant is wrong and activity_logs is append-only, so a
+# production probe could leave a permanent entry. Their production denial is proven
+# read-only by the Appendix A has_function_privilege query instead. Exercise the
+# calls only on staging, where the rows can be thrown away:
+#   run_rpc log_admin_action '{"p_action":"ZZ Test","p_details":{}}'
+#   run_rpc write_log '{"p_action":"ZZ Test","p_guest_id":null,"p_guest_name":null,"p_station":null,"p_method":null,"p_result":"rejected","p_details":{}}'
+
+# Allowed anon RPCs (expect 200; get_pass returns ok:false for a bad token)
+run_rpc get_public_settings '{}'
+run_rpc get_teams '{}'
+run_rpc get_pass '{"p_token":"00000000"}'
 
 # Edge Function: wrong method, missing Turnstile token
 curl -s -i -X GET  "$SUPABASE_URL/functions/v1/register-guest" -H "Authorization: Bearer $ANON_KEY" | head -n 1
@@ -366,8 +440,10 @@ curl -s -X POST "$SUPABASE_URL/functions/v1/register-guest" \
   -H "Authorization: Bearer $ANON_KEY" -H "Content-Type: application/json" \
   -d '{"name":"Test Person"}'
 
-# Repeat the table and RPC loops using a STAFF user's JWT in the Authorization header
-# (log in on staging, copy the access token into STAFF_JWT).
+# STAFF JWT loops: STAGING ONLY. Every state-changing staff/admin RPC calls
+# write_log, which inserts into activity_logs and updates staff.last_active_at, so
+# these calls are not read-only. On production, prove SEC-12 and SEC-13 with Appendix F instead
+# (grant inspection plus the is_admin / is_active_staff / can_act_at helpers).
 ```
 
 ## Appendix C — Lighthouse
@@ -424,3 +500,197 @@ Registration scenario: POST to the staging `register-guest` function with `{ nam
 - Battery and power: staff phones on chargers or power banks for the whole event.
 - A full staff dry run with the real people and devices, including the help desk flow.
 - Client sign-off on the team list spelling and the rules printed on the poster and the form ("Must be present to win").
+
+## Appendix F — Read-only SEC-10–13 procedure (production or staging)
+
+Run these blocks in the Supabase SQL Editor, one block at a time. Every block is a
+single transaction that ends in `rollback`; none of them writes data, changes a
+grant, or changes settings.
+
+**Never call a mutating RPC to "test" it.** Every state-changing staff/admin RPC
+calls `write_log`, which inserts into `activity_logs` and updates
+`staff.last_active_at`; `write_log` and `log_admin_action` write those rows
+themselves. That covers `check_in_guest`, `claim_station`, `void_guest`,
+`restore_guest`, `undo_check_in`, `undo_claim`, `record_winner`, and `void_winner`.
+(`search_guests`, `dashboard_stats`, `dashboard_snapshot`, and `team_stats` are
+read-only.) Appendix F proves those endpoints with grant inspection and with the
+`is_admin` / `is_active_staff` / `can_act_at` helpers instead.
+
+If the editor reports that it ran only the selected statement, select the whole
+block before running it.
+
+### F-1. SEC-10 — anon cannot read any table or view
+
+Run the "Effective table privileges" and "Column-level check" queries in Appendix A.
+Expected: every `anon_select` value is `false`.
+
+Then confirm at runtime (no role switch per object):
+
+```sql
+begin;
+set local role anon;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['guests','staff','settings','claims','winners',
+                           'activity_logs','teams','raffle_pool','guest_overview']
+  loop
+    begin
+      execute format('select count(*) from public.%I', t);
+      raise notice 'FAIL: anon select on % succeeded', t;
+    exception when insufficient_privilege then
+      raise notice 'PASS: anon select on % is denied', t;
+    end;
+  end loop;
+end $$;
+rollback;
+```
+
+Expected: one `PASS` notice per object and no `FAIL`. Any `FAIL` is a Blocker.
+A grant check that passes but a select that succeeds means the table or view is
+readable with the anon key.
+
+### F-2. SEC-11 — anon RPC surface
+
+Run the Appendix A "Function execute rights" query. Expected:
+`anon_can_exec = true` only for `get_public_settings`, `get_pass`, and `get_teams`;
+`false` for every other function, including `log_admin_action`, `write_log`,
+`resolve_guest`, and `register_guest_internal`.
+
+If any other function shows `true`, do not call it. Record the function name and
+stop; it is a Blocker.
+
+The three allowed functions are read-only and safe to call:
+
+```sql
+begin;
+set local role anon;
+select public.get_public_settings();
+select public.get_teams();
+select public.get_pass('000000');
+rollback;
+```
+
+Expected: two results plus `get_pass` returning `{ ok: false, code: "not_found" }`.
+Any SQL error means the grant is missing; any other `get_pass` result is a Blocker.
+
+### F-3. SEC-12 — a non-admin staff session cannot read data
+
+Pick a non-admin staff account (staging, or the real one on production):
+
+```sql
+select user_id, full_name, role, station, active
+from public.staff
+order by role, created_at;
+```
+
+Run this block with that user's UUID substituted:
+
+```sql
+begin;
+select set_config('request.jwt.claim.sub', '<STAFF_USER_ID>', true) as sub,
+       set_config('request.jwt.claims',
+         jsonb_build_object('sub', '<STAFF_USER_ID>', 'role', 'authenticated')::text,
+         true) as claims;
+set local role authenticated;
+do $$
+declare
+  r record;
+  n bigint;
+begin
+  for r in select * from (values
+      ('guests','id'), ('claims','guest_id'), ('winners','guest_id'),
+      ('activity_logs','id'), ('settings','id'), ('teams','id'),
+      ('raffle_pool','id'), ('guest_overview','id')
+    ) as v(tbl, col)
+  loop
+    begin
+      execute format('select count(*) from (select %I from public.%I limit 1) s',
+                     r.col, r.tbl) into n;
+      if n = 0 then
+        raise notice 'PASS: % returns 0 rows', r.tbl;
+      else
+        raise notice 'FAIL: % returned % row(s)', r.tbl, n;
+      end if;
+    exception when insufficient_privilege then
+      raise notice 'PASS: % is denied by grants', r.tbl;
+    end;
+  end loop;
+
+  select count(*) into n from public.staff;
+  raise notice 'staff: % visible row(s) (expected 1, own row)', n;
+
+  begin
+    perform public.dashboard_stats();
+    raise notice 'FAIL: dashboard_stats succeeded for a non-admin';
+  exception when insufficient_privilege then
+    if sqlerrm = 'not_authorized' then
+      raise notice 'PASS: dashboard_stats rejected by the role check';
+    else
+      raise notice 'FAIL: dashboard_stats raised "%" (missing grant or wrong role)', sqlerrm;
+    end if;
+  end;
+end $$;
+rollback;
+```
+
+Expected: `0 rows` for every listed object, `staff: 1 visible row(s)`, and
+`dashboard_stats rejected by the role check`. Any returned row is a Blocker; a
+`dashboard_stats` failure whose message is not `not_authorized` is also a FAIL
+(it means the `authenticated` grant is missing or the role is wrong).
+Also run the Appendix A `has_column_privilege` query: `token` and `backup_code` must
+be `false` for `authenticated`.
+
+### F-4. SEC-13 — station lock and deactivated staff
+
+Use the staff list from F-3. Run the helper block once per account type, replacing
+`<USER_ID>`:
+
+```sql
+begin;
+select set_config('request.jwt.claim.sub', '<USER_ID>', true) as sub,
+       set_config('request.jwt.claims',
+         jsonb_build_object('sub', '<USER_ID>', 'role', 'authenticated')::text,
+         true) as claims;
+select public.is_active_staff() as active_staff,
+       public.is_admin() as admin,
+       public.can_act_at('cocktail') as can_cocktail,
+       public.can_act_at('bundle') as can_bundle,
+       public.can_act_at('entrance') as can_entrance;
+rollback;
+```
+
+Expected:
+
+| Account | active_staff | admin | can_cocktail | can_bundle | can_entrance |
+|---|---|---|---|---|---|
+| Active staff assigned `cocktail` | `true` | `false` | `true` | `false` | `false` |
+| Active admin | `true` | `true` | `true` | `true` | `true` |
+| Deactivated staff | `false` | `false` | `false` | `false` | `false` |
+
+If no `cocktail` staff exists, use another station and invert the `true`/`false`
+columns for that row.
+
+Every staff/admin RPC must reject on these helpers first. Confirm the path:
+
+```sql
+select p.proname,
+       position('can_act_at' in pg_get_functiondef(p.oid)) > 0 as checks_station,
+       position('is_active_staff' in pg_get_functiondef(p.oid)) > 0 as checks_active,
+       position('is_admin' in pg_get_functiondef(p.oid)) > 0 as checks_admin
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in ('check_in_guest','claim_station','search_guests','void_guest',
+                    'restore_guest','undo_check_in','undo_claim','record_winner',
+                    'void_winner','dashboard_stats','dashboard_snapshot','team_stats')
+order by 1;
+```
+
+Expected: `check_in_guest` and `claim_station` have `checks_station = true`;
+`search_guests` has `checks_active = true`; the admin RPCs have
+`checks_admin = true`. A row with all three `false` is a Blocker.
+
+Record every notice and result in `docs/audit/report.md` under SEC-10 to SEC-13.
+Any FAIL stops deployment.

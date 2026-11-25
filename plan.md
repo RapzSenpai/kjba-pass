@@ -1794,8 +1794,8 @@ grant execute on function public.team_stats() to authenticated;
 **9. Owner steps after Cursor finishes**
 
 Do these before registration opens, in this order:
-1. Run `12_teams.sql` in the Supabase SQL Editor, then `99_verify.sql`. Tick `APPLIED.md`.
-2. Paste the updated `register-guest` into the Supabase Edge Functions editor and deploy.
+1. Run `12_teams.sql`, then the duplicate-active-winner check in the header of `13_audit_fixes.sql` (it must return zero rows), then `13_audit_fixes.sql`, then `99_verify.sql`. Every row must say PASS; the only allowed SKIP is `team_stats_sums` while no active admin exists — create the admin, then re-run until it says PASS. Tick `APPLIED.md`.
+2. Paste the updated `register-guest` into the Supabase Edge Functions editor and deploy. It sends `p_request_id`, so it only works after step 1.
 3. Redeploy the frontend.
 4. Optional, before the event only: clear the test guests (they would show as "Unassigned").
    ```sql
@@ -1806,7 +1806,7 @@ Do these before registration opens, in this order:
    delete from public.guests;
    ```
 
-If the frontend goes live before steps 1 and 2, registration breaks (the old function has no team). Keep registration closed during the switch.
+If the frontend goes live before steps 1 and 2, registration breaks: the old database function has no team, and the new function's `p_request_id` argument does not exist yet. Keep registration closed until all three steps are done.
 
 #### Not in this phase
 
